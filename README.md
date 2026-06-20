@@ -22,8 +22,17 @@ copy .env.example .env
 
 ## Utilisation
 
+### Mode simple (sans IDE)
+
+**Glisser-déposer** ton fichier Excel sur `Famimport.bat`. Le résultat apparaît dans le dossier `output\` avec un timestamp.
+
+Ou double-clique `Famimport.bat` et tape le chemin du fichier.
+
+### Mode ligne de commande
+
 ```powershell
 npm start -- --input data/import-fournisseur.xlsx --output output/import-verified.xlsx
+# Options : --limit N (limite à N premières lignes), --concurrency N (parallélisme, défaut 4)
 ```
 
 ## Structure
