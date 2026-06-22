@@ -10,8 +10,8 @@ tmp/
 *.xlsx
 *.xls
 
-# Catalogue produits (BDD + photos extraites)
-catalog/
+# Catalogue produits (BDD + photos extraites) — seulement à la racine, pas src/catalog
+/catalog/
 
 # Logs
 *.log
