@@ -38,6 +38,7 @@ import {
   setAuthCookie,
   clearAuthCookie,
 } from "./web/auth.js";
+import { seedDb, seedPhotos, adminStatus } from "./web/admin.js";
 import { config } from "./config.js";
 
 const app = express();
@@ -208,6 +209,12 @@ app.get("/uploads/:id", (req, res) => {
   }
   res.send(renderUploadDetail(u, getUploadRows(id), lang));
 });
+
+// Admin seed endpoints (temporary — for Railway initial data load).
+// Auth-protected. Raw body, no multer.
+app.get("/admin/status", adminStatus);
+app.post("/admin/seed-db", seedDb);
+app.post("/admin/seed-photos", seedPhotos);
 
 app.get("/uploads/:id/export", async (req, res, next) => {
   try {

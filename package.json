@@ -27,7 +27,8 @@
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "multer": "^2.2.0",
-    "pdfjs-dist": "^6.0.227"
+    "pdfjs-dist": "^6.0.227",
+    "tar": "^7.5.16"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
