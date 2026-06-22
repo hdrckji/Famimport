@@ -82,7 +82,7 @@ app.get("/products/:id", (req, res) => {
   res.send(renderProductDetail(p, history));
 });
 
-const PORT = Number(process.env.PORT ?? 3000);
+const PORT = Number(process.env.PORT ?? 3050);
 app.listen(PORT, () => {
   console.log(`Famimport explorer running on http://localhost:${PORT}`);
 });
