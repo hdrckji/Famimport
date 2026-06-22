@@ -1,23 +1,28 @@
-export function layout(title: string, body: string, activeNav: string = ""): string {
+import type { Lang } from "./i18n.js";
+import { t } from "./i18n.js";
+
+export function layout(title: string, body: string, activeNav: string, lang: Lang, currentPath: string): string {
+  const tr = t(lang);
+  const otherLang: Lang = lang === "fr" ? "nl" : "fr";
+  const switchUrl = `/lang/${otherLang}?next=${encodeURIComponent(currentPath)}`;
   return `<!DOCTYPE html>
-<html lang="fr">
+<html lang="${lang}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)} — Famimport</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    .badge { @apply inline-block px-2 py-0.5 text-xs rounded; }
-  </style>
+  <style>body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }</style>
 </head>
 <body class="bg-slate-50 text-slate-900">
   <nav class="bg-white shadow-sm border-b border-slate-200">
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-6">
       <a href="/" class="font-bold text-lg text-slate-800">Famimport</a>
-      <a href="/" class="${navCls(activeNav, "dashboard")}">Tableau de bord</a>
-      <a href="/imports" class="${navCls(activeNav, "imports")}">Imports</a>
-      <a href="/products" class="${navCls(activeNav, "products")}">Catalogue</a>
+      <a href="/" class="${navCls(activeNav, "dashboard")}">${escapeHtml(tr.navDashboard)}</a>
+      <a href="/imports" class="${navCls(activeNav, "imports")}">${escapeHtml(tr.navImports)}</a>
+      <a href="/products" class="${navCls(activeNav, "products")}">${escapeHtml(tr.navProducts)}</a>
+      <span class="ml-auto text-xs text-slate-400">${lang === "fr" ? "FR" : "NL"}</span>
+      <a href="${switchUrl}" class="text-xs px-2 py-1 rounded border border-slate-300 hover:bg-slate-100" title="${lang === "fr" ? "Schakelen naar Nederlands" : "Passer en français"}">${otherLang.toUpperCase()}</a>
     </div>
   </nav>
   <main class="max-w-7xl mx-auto px-4 py-6">

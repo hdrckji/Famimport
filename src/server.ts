@@ -17,25 +17,46 @@ import {
   renderProductsSearch,
   renderProductDetail,
 } from "./web/views.js";
+import type { Lang } from "./web/i18n.js";
 
 const app = express();
 const PHOTOS_ROOT = path.join(process.cwd(), "catalog", "photos");
 
+function getLang(req: express.Request): Lang {
+  const cookieLang = req.headers.cookie
+    ?.split(";")
+    .map((s) => s.trim())
+    .find((s) => s.startsWith("lang="))
+    ?.split("=")[1];
+  if (cookieLang === "nl") return "nl";
+  return "fr";
+}
+
 app.use("/photo", express.static(PHOTOS_ROOT));
 
-app.get("/", (_req, res) => {
+app.get("/lang/:lang", (req, res) => {
+  const lang = req.params.lang === "nl" ? "nl" : "fr";
+  const next = typeof req.query.next === "string" ? req.query.next : "/";
+  res.setHeader("Set-Cookie", `lang=${lang}; Path=/; Max-Age=31536000; SameSite=Lax`);
+  res.redirect(next);
+});
+
+app.get("/", (req, res) => {
+  const lang = getLang(req);
   const stats = getDashboardStats();
   const imports = listImports();
   const topCodes = getTopTarabelCodes(15);
-  res.send(renderDashboard(stats, imports, topCodes));
+  res.send(renderDashboard(stats, imports, topCodes, lang));
 });
 
-app.get("/imports", (_req, res) => {
+app.get("/imports", (req, res) => {
+  const lang = getLang(req);
   const imports = listImports();
-  res.send(renderImports(imports));
+  res.send(renderImports(imports, lang));
 });
 
 app.get("/imports/:id", (req, res) => {
+  const lang = getLang(req);
   const id = Number(req.params.id);
   const imp = getImport(id);
   if (!imp) {
@@ -43,10 +64,11 @@ app.get("/imports/:id", (req, res) => {
     return;
   }
   const products = listProductsForImport(id);
-  res.send(renderImportDetail(imp, products));
+  res.send(renderImportDetail(imp, products, lang));
 });
 
 app.get("/products", (req, res) => {
+  const lang = getLang(req);
   const filters = {
     q: String(req.query.q ?? ""),
     ean: String(req.query.ean ?? ""),
@@ -68,10 +90,11 @@ app.get("/products", (req, res) => {
     limit,
     offset,
   });
-  res.send(renderProductsSearch(filters, results, page, limit));
+  res.send(renderProductsSearch(filters, results, page, limit, lang));
 });
 
 app.get("/products/:id", (req, res) => {
+  const lang = getLang(req);
   const id = Number(req.params.id);
   const p = getProduct(id);
   if (!p) {
@@ -79,7 +102,7 @@ app.get("/products/:id", (req, res) => {
     return;
   }
   const history = p.ean ? getEanHistory(p.ean) : [p];
-  res.send(renderProductDetail(p, history));
+  res.send(renderProductDetail(p, history, lang));
 });
 
 const PORT = Number(process.env.PORT ?? 3050);
