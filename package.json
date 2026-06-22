@@ -4,6 +4,9 @@
   "private": true,
   "description": "Vérification et correction des codes HS (Tarabel) pour imports Chine→Belgique",
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
