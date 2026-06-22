@@ -7,14 +7,20 @@
   "scripts": {
     "build": "tsc",
     "start": "node --import tsx src/index.ts",
+    "web": "node --import tsx src/server.ts",
+    "ingest": "node --import tsx src/ingest-catalog.ts",
+    "ingest-customs": "node --import tsx src/ingest-customs.ts",
+    "stats": "node --import tsx src/catalog-stats.ts",
     "check": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
     "better-sqlite3": "^12.11.1",
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
+    "express": "^5.2.1",
     "pdfjs-dist": "^6.0.227"
   },
   "devDependencies": {
