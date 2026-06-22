@@ -10,6 +10,9 @@ tmp/
 *.xlsx
 *.xls
 
+# Catalogue produits (BDD + photos extraites)
+catalog/
+
 # Logs
 *.log
 npm-debug.log*

@@ -11,8 +11,11 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.11.1",
     "dotenv": "^16.4.5",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "pdfjs-dist": "^6.0.227"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
