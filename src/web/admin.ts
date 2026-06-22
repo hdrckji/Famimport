@@ -50,6 +50,33 @@ export async function seedPhotos(req: express.Request, res: express.Response): P
   }
 }
 
+/**
+ * Move /data/photos/photos/* up to /data/photos/ and remove the empty inner dir.
+ * Fixes a tar archive that was created with an extra leading directory.
+ */
+export async function flattenPhotos(_req: express.Request, res: express.Response): Promise<void> {
+  const fs = await import("node:fs/promises");
+  try {
+    const root = config.photosDir;
+    const innerPath = path.join(root, "photos");
+    const innerStat = await fs.stat(innerPath).catch(() => null);
+    if (!innerStat || !innerStat.isDirectory()) {
+      res.json({ ok: false, message: "no inner photos/ directory found, nothing to flatten" });
+      return;
+    }
+    const entries = await fs.readdir(innerPath);
+    let moved = 0;
+    for (const e of entries) {
+      await fs.rename(path.join(innerPath, e), path.join(root, e));
+      moved++;
+    }
+    await fs.rmdir(innerPath).catch(() => {});
+    res.json({ ok: true, moved, message: `Moved ${moved} entries from photos/photos/ up to photos/` });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
 export async function adminStatus(_req: express.Request, res: express.Response): Promise<void> {
   const fs = await import("node:fs/promises");
   const result: Record<string, unknown> = {

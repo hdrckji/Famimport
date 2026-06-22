@@ -1,6 +1,11 @@
 import path from "node:path";
 
-const DATA_ROOT = process.env.DATA_ROOT ?? path.join(process.cwd(), "catalog");
+// Railway exposes RAILWAY_VOLUME_MOUNT_PATH automatically when a volume is mounted.
+// Fall back to DATA_ROOT (manual config) and then to a local ./catalog folder.
+const DATA_ROOT =
+  process.env.RAILWAY_VOLUME_MOUNT_PATH ??
+  process.env.DATA_ROOT ??
+  path.join(process.cwd(), "catalog");
 
 export const config = {
   port: Number(process.env.PORT ?? 3050),

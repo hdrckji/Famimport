@@ -13,6 +13,11 @@ tmp/
 # Catalogue produits (BDD + photos extraites) — seulement à la racine, pas src/catalog
 /catalog/
 
+# Archives temporaires (seed Railway)
+*.tar.gz
+*.tar
+*.zip
+
 # Logs
 *.log
 npm-debug.log*
