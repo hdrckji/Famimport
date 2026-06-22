@@ -13,12 +13,15 @@ Méthode :
 3. Le matériau chinois est généralement correct mais peut être erroné. Si la photo contredit clairement le matériau déclaré, signale-le.
 4. Si plusieurs codes sont plausibles, choisis le plus probable et indique une confiance "medium".
 5. Si tu hésites entre plusieurs familles très différentes, marque "low" + needsManualReview=true.
-6. Pour le taux de droits d'invoer (invoerRate), donne l'estimation EU standard pour ce code (taux conventionnel) en pourcentage. Si tu ne le connais pas avec certitude, mets null.
+6. Pour les taux de droits d'invoer, donne l'estimation EU standard (taux conventionnel "erga omnes" ou applicable à la Chine si différent), en pourcentage. Si tu ne le connais pas avec certitude, mets null.
+   - invoerRateForChinaCode : le taux qui s'appliquerait SI on utilisait le code HS proposé par la Chine (utile pour montrer à l'utilisateur ce qu'il paierait avec le mauvais code).
+   - invoerRateForSuggestedCode : le taux qui s'applique à TON code Tarabel suggéré. Si tu suggères le même code que la Chine, mets la même valeur dans les deux champs.
 
 Format de sortie : UNIQUEMENT un objet JSON valide, sans texte autour, conforme à ce schéma :
 {
   "tarabelCode": "string (10 chiffres, sans espace)",
-  "invoerRate": number | null,
+  "invoerRateForChinaCode": number | null,
+  "invoerRateForSuggestedCode": number | null,
   "confidence": "high" | "medium" | "low",
   "justification": "string en français, max 2 phrases, explique POURQUOI ce code",
   "materialConfirmed": boolean,
@@ -72,12 +75,16 @@ function parseClassification(text: string): ClassificationResult {
   const tarabelCode = String(obj.tarabelCode ?? "").replace(/\D/g, "");
   if (tarabelCode.length === 0) throw new Error("tarabelCode manquant");
 
+  const parseRate = (v: unknown): number | null => {
+    if (v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
   return {
     tarabelCode,
-    invoerRate:
-      obj.invoerRate == null || Number.isNaN(Number(obj.invoerRate))
-        ? null
-        : Number(obj.invoerRate),
+    invoerRateForChinaCode: parseRate(obj.invoerRateForChinaCode),
+    invoerRateForSuggestedCode: parseRate(obj.invoerRateForSuggestedCode),
     confidence: (obj.confidence ?? "low") as ClassificationResult["confidence"],
     justification: String(obj.justification ?? ""),
     materialConfirmed: Boolean(obj.materialConfirmed),

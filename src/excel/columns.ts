@@ -28,6 +28,7 @@ export const AUDIT_COLS = {
   materialConfirmed: 54,
   materialNote: 55,
   divergesFromChina: 56,
+  invoerRateSuggested: 57,
 } as const;
 
 export const AUDIT_HEADERS: Array<[number, string]> = [
@@ -37,4 +38,5 @@ export const AUDIT_HEADERS: Array<[number, string]> = [
   [AUDIT_COLS.materialConfirmed, "Claude: material confirmed"],
   [AUDIT_COLS.materialNote, "Claude: material note"],
   [AUDIT_COLS.divergesFromChina, "Claude: diverges from China HS"],
+  [AUDIT_COLS.invoerRateSuggested, "Claude: %invoer si code suggéré"],
 ];

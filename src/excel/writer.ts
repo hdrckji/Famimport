@@ -60,9 +60,28 @@ export async function writeResults(
 
     const cls = row.classification;
     target.getCell(COL.intrastat).value = cls.tarabelCode;
-    if (cls.invoerRate != null) {
-      target.getCell(COL.invoerPct).value = cls.invoerRate / 100;
+    if (cls.invoerRateForChinaCode != null) {
+      target.getCell(COL.invoerPct).value = cls.invoerRateForChinaCode / 100;
       target.getCell(COL.invoerPct).numFmt = "0.00%";
+    }
+    if (cls.invoerRateForSuggestedCode != null) {
+      target.getCell(AUDIT_COLS.invoerRateSuggested).value =
+        cls.invoerRateForSuggestedCode / 100;
+      target.getCell(AUDIT_COLS.invoerRateSuggested).numFmt = "0.00%";
+    }
+
+    {
+      const hsCell = target.getCell(COL.hsCodeChina);
+      const baseStyle = JSON.parse(JSON.stringify(hsCell.style ?? {}));
+      if (cls.divergesFromChina) {
+        hsCell.style = {
+          ...baseStyle,
+          fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFC7CE" } },
+          font: { ...(baseStyle.font ?? {}), bold: true, color: { argb: "FF9C0006" } },
+        };
+      } else {
+        hsCell.style = baseStyle;
+      }
     }
 
     target.getCell(AUDIT_COLS.confidence).value = cls.confidence;

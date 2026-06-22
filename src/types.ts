@@ -20,7 +20,8 @@ export interface ProductRow {
 
 export interface ClassificationResult {
   tarabelCode: string;
-  invoerRate: number | null;
+  invoerRateForChinaCode: number | null;
+  invoerRateForSuggestedCode: number | null;
   confidence: Confidence;
   justification: string;
   materialConfirmed: boolean;
