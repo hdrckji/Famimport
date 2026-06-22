@@ -4,9 +4,10 @@ import { writeFileSync } from "node:fs";
 import { readPackingList } from "../catalog/reader.js";
 import { lookupCatalog } from "./lookup.js";
 import { getDb } from "./db.js";
+import { config } from "../config.js";
 
-const UPLOADS_DIR = path.join(process.cwd(), "catalog", "uploads");
-const UPLOAD_PHOTOS_DIR = path.join(process.cwd(), "catalog", "upload-photos");
+const UPLOADS_DIR = config.uploadsDir;
+const UPLOAD_PHOTOS_DIR = config.uploadPhotosDir;
 
 export interface UploadSummary {
   id: number;

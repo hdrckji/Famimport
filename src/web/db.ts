@@ -1,13 +1,14 @@
 import Database from "better-sqlite3";
+import fs from "node:fs";
 import path from "node:path";
 import { initSchema } from "../catalog/schema.js";
-
-const DB_PATH = path.join(process.cwd(), "catalog", "catalog.db");
+import { config } from "../config.js";
 
 let _db: Database.Database | null = null;
 export function getDb(): Database.Database {
   if (!_db) {
-    _db = new Database(DB_PATH, { readonly: false });
+    fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
+    _db = new Database(config.dbPath, { readonly: false });
     _db.pragma("journal_mode = WAL");
     initSchema(_db);
   }

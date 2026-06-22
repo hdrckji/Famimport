@@ -1,7 +1,6 @@
 import express from "express";
 import multer from "multer";
 import path from "node:path";
-import fs from "node:fs/promises";
 import {
   getDashboardStats,
   listImports,
@@ -29,15 +28,20 @@ import {
   getUpload,
   listUploads,
   getUploadRows,
-  UPLOADS_DIR,
-  UPLOAD_PHOTOS_DIR,
   ensureUploadDirs,
 } from "./web/upload.js";
 import { buildExportWorkbook } from "./web/export-xlsx.js";
 import type { Lang } from "./web/i18n.js";
+import {
+  requireAuth,
+  renderLogin,
+  setAuthCookie,
+  clearAuthCookie,
+} from "./web/auth.js";
+import { config } from "./config.js";
 
 const app = express();
-const PHOTOS_ROOT = path.join(process.cwd(), "catalog", "photos");
+app.use(express.urlencoded({ extended: false }));
 
 function getLang(req: express.Request): Lang {
   const cookieLang = req.headers.cookie
@@ -52,7 +56,7 @@ function getLang(req: express.Request): Lang {
 await ensureUploadDirs();
 
 const uploadStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+  destination: (_req, _file, cb) => cb(null, config.uploadsDir),
   filename: (_req, file, cb) => {
     const ts = Date.now();
     const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -68,8 +72,35 @@ const upload = multer({
   },
 });
 
-app.use("/photo", express.static(PHOTOS_ROOT));
-app.use("/upload-photo", express.static(UPLOAD_PHOTOS_DIR));
+// Public routes
+app.get("/health", (_req, res) => res.json({ ok: true }));
+
+app.get("/login", (req, res) => {
+  const lang = getLang(req);
+  const next = typeof req.query.next === "string" ? req.query.next : "/";
+  res.send(renderLogin(lang, undefined, next));
+});
+
+app.post("/login", (req, res) => {
+  const lang = getLang(req);
+  const password = String(req.body?.password ?? "");
+  const next = String(req.body?.next ?? "/");
+  if (!config.appPassword) {
+    res.status(500).send(renderLogin(lang, "APP_PASSWORD non configuré côté serveur"));
+    return;
+  }
+  if (password === config.appPassword) {
+    setAuthCookie(res);
+    res.redirect(next);
+    return;
+  }
+  res.status(401).send(renderLogin(lang, lang === "fr" ? "Mot de passe incorrect" : "Wachtwoord onjuist", next));
+});
+
+app.post("/logout", (_req, res) => {
+  clearAuthCookie(res);
+  res.redirect("/login");
+});
 
 app.get("/lang/:lang", (req, res) => {
   const lang = req.params.lang === "nl" ? "nl" : "fr";
@@ -77,6 +108,11 @@ app.get("/lang/:lang", (req, res) => {
   res.setHeader("Set-Cookie", `lang=${lang}; Path=/; Max-Age=31536000; SameSite=Lax`);
   res.redirect(next);
 });
+
+// Protected routes from here on
+app.use(requireAuth);
+app.use("/photo", express.static(config.photosDir));
+app.use("/upload-photo", express.static(config.uploadPhotosDir));
 
 app.get("/", (req, res) => {
   const lang = getLang(req);
@@ -139,12 +175,11 @@ app.get("/products/:id", (req, res) => {
   res.send(renderProductDetail(p, history, lang));
 });
 
-// Upload routes
 app.get("/upload", (req, res) => {
   res.send(renderUploadForm(getLang(req)));
 });
 
-app.post("/upload", upload.single("file"), async (req, res, next) => {
+app.post("/upload", upload.single("file"), async (req, res) => {
   const lang = getLang(req);
   try {
     if (!req.file) {
@@ -186,7 +221,9 @@ app.get("/uploads/:id/export", async (req, res, next) => {
   }
 });
 
-const PORT = Number(process.env.PORT ?? 3050);
-app.listen(PORT, () => {
-  console.log(`Famimport explorer running on http://localhost:${PORT}`);
+app.listen(config.port, () => {
+  console.log(`Famimport explorer running on http://localhost:${config.port}`);
+  if (!config.appPassword) {
+    console.warn("⚠ APP_PASSWORD non défini — l'app est en accès libre (mode dev)");
+  }
 });

@@ -6,8 +6,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node --import tsx src/index.ts",
+    "start": "node dist/server.js",
     "web": "node --import tsx src/server.ts",
+    "cli": "node --import tsx src/index.ts",
     "ingest": "node --import tsx src/ingest-catalog.ts",
     "ingest-customs": "node --import tsx src/ingest-customs.ts",
     "stats": "node --import tsx src/catalog-stats.ts",
