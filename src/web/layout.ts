@@ -19,6 +19,8 @@ export function layout(title: string, body: string, activeNav: string, lang: Lan
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-6">
       <a href="/" class="font-bold text-lg text-slate-800">Famimport</a>
       <a href="/" class="${navCls(activeNav, "dashboard")}">${escapeHtml(tr.navDashboard)}</a>
+      <a href="/upload" class="${navCls(activeNav, "uploads")} ${activeNav === "uploads" ? "" : "bg-blue-600 text-white hover:bg-blue-700 hover:text-white px-3 py-1 rounded"}">${escapeHtml(tr.navUpload)}</a>
+      <a href="/uploads" class="${navCls(activeNav, "uploads-list")}">${escapeHtml(tr.navHistory)}</a>
       <a href="/imports" class="${navCls(activeNav, "imports")}">${escapeHtml(tr.navImports)}</a>
       <a href="/products" class="${navCls(activeNav, "products")}">${escapeHtml(tr.navProducts)}</a>
       <span class="ml-auto text-xs text-slate-400">${lang === "fr" ? "FR" : "NL"}</span>

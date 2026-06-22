@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import path from "node:path";
+import { initSchema } from "../catalog/schema.js";
 
 const DB_PATH = path.join(process.cwd(), "catalog", "catalog.db");
 
@@ -8,6 +9,7 @@ export function getDb(): Database.Database {
   if (!_db) {
     _db = new Database(DB_PATH, { readonly: false });
     _db.pragma("journal_mode = WAL");
+    initSchema(_db);
   }
   return _db;
 }

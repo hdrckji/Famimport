@@ -82,6 +82,8 @@ interface UIStrings {
   navDashboard: string;
   navImports: string;
   navProducts: string;
+  navUpload: string;
+  navHistory: string;
   dashboardTitle: string;
   cardImports: string;
   cardImportsSub: string;
@@ -148,8 +150,10 @@ interface UIStrings {
 
 const FR: UIStrings = {
   navDashboard: "Tableau de bord",
-  navImports: "Imports",
+  navImports: "Imports passés",
   navProducts: "Catalogue",
+  navUpload: "Vérifier un import",
+  navHistory: "Mes vérifications",
   dashboardTitle: "Tableau de bord",
   cardImports: "Imports historisés",
   cardImportsSub: "Avec data dans la BDD",
@@ -216,8 +220,10 @@ const FR: UIStrings = {
 
 const NL: UIStrings = {
   navDashboard: "Dashboard",
-  navImports: "Imports",
+  navImports: "Vorige imports",
   navProducts: "Catalogus",
+  navUpload: "Import verifiëren",
+  navHistory: "Mijn verificaties",
   dashboardTitle: "Dashboard",
   cardImports: "Geregistreerde imports",
   cardImportsSub: "Met data in de DB",
