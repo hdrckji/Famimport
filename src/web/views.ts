@@ -135,7 +135,6 @@ export function renderImports(imports: ImportRow[], lang: Lang): string {
       <td class="py-2 px-3">${coverageCell(i.customs_validated_count, i.product_count, "green")}</td>
       <td class="py-2 px-3">${coverageCell(i.internal_estimate_count, i.product_count, "yellow")}</td>
       <td class="py-2 px-3 text-sm">${i.declaration_count > 0 ? "✓" : "—"}</td>
-      <td class="py-2 px-3 text-xs text-slate-500">${escapeHtml(i.schema_variant ?? "")}</td>
     </tr>`;
   }).join("");
 
@@ -152,7 +151,6 @@ export function renderImports(imports: ImportRow[], lang: Lang): string {
             <th class="py-2 px-3 text-left text-green-700" title="${escapeHtml(tr.cardCustomsValidatedSub)}">${escapeHtml(tr.customsValidated)}</th>
             <th class="py-2 px-3 text-left text-yellow-700" title="${escapeHtml(tr.cardInternalEstimateSub)}">${escapeHtml(tr.internalEstimate)}</th>
             <th class="py-2 px-3 text-left">${escapeHtml(tr.customsPdf)}</th>
-            <th class="py-2 px-3 text-left">${escapeHtml(tr.sheet)}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
