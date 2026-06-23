@@ -112,27 +112,43 @@ function matchCustomsToProducts(
 
   const products = db
     .prepare(
-      "SELECT id, hs_china, tarabel_validated FROM products WHERE import_id = ?",
+      "SELECT id, hs_china, tarabel_validated, tarabel_source FROM products WHERE import_id = ?",
     )
-    .all(importId) as Array<{ id: number; hs_china: string | null; tarabel_validated: string | null }>;
+    .all(importId) as Array<{ id: number; hs_china: string | null; tarabel_validated: string | null; tarabel_source: string | null }>;
 
   const updateProduct = db.prepare(
     "UPDATE products SET tarabel_validated = ?, tarabel_source = 'customs_pdf' WHERE id = ?",
   );
 
+  // Try to match a product against the customs lines list using a code as hint.
+  // Returns a single matched line code, or null if 0 or ambiguous matches.
+  function tryMatch(code: string): string | null {
+    // 1) exact 10-digit match (best signal — the code is literally one of the declared codes)
+    const exact10 = customsLines.find((c) => c.hs_code === code);
+    if (exact10) return exact10.hs_code;
+    // 2) 6-digit prefix match → 1 candidate
+    const prefix6 = code.slice(0, 6);
+    const m6 = customsLines.filter((c) => c.hs_code.startsWith(prefix6));
+    if (m6.length === 1) return m6[0].hs_code;
+    // 3) 4-digit prefix match → 1 candidate
+    const prefix4 = code.slice(0, 4);
+    const m4 = customsLines.filter((c) => c.hs_code.startsWith(prefix4));
+    if (m4.length === 1) return m4[0].hs_code;
+    return null;
+  }
+
   let matched = 0;
   for (const p of products) {
-    if (p.tarabel_validated) continue;
-    if (!p.hs_china) continue;
-    const prefix6 = p.hs_china.slice(0, 6);
-    const prefix4 = p.hs_china.slice(0, 4);
-
-    const exact = customsLines.filter((c) => c.hs_code.startsWith(prefix6));
-    const broader = customsLines.filter((c) => c.hs_code.startsWith(prefix4));
+    // Skip products already validated by customs (idempotent re-run safety)
+    if (p.tarabel_source === "customs_pdf") continue;
+    // Need either a chinese code or an internal-estimate code to try matching
+    if (!p.hs_china && !p.tarabel_validated) continue;
 
     let chosen: string | null = null;
-    if (exact.length === 1) chosen = exact[0].hs_code;
-    else if (exact.length === 0 && broader.length === 1) chosen = broader[0].hs_code;
+    // First try with hs_china (supplier's proposal)
+    if (p.hs_china) chosen = tryMatch(p.hs_china);
+    // If that didn't match, try with the existing internal estimate
+    if (!chosen && p.tarabel_validated) chosen = tryMatch(p.tarabel_validated);
 
     if (chosen) {
       updateProduct.run(chosen, p.id);
@@ -140,6 +156,30 @@ function matchCustomsToProducts(
     }
   }
   return matched;
+}
+
+/**
+ * Re-run customs↔product matching across ALL imports that have a parsed customs declaration.
+ * Useful after improving the matching heuristic or fixing a bug where some products were skipped.
+ */
+export function rematchAllCustoms(db: Database.Database): {
+  importsProcessed: number;
+  totalMatched: number;
+  perImport: Array<{ import_id: number; folder: string; matched: number }>;
+} {
+  const decls = db
+    .prepare("SELECT id AS decl_id, import_id FROM customs_declarations")
+    .all() as Array<{ decl_id: number; import_id: number }>;
+
+  const perImport: Array<{ import_id: number; folder: string; matched: number }> = [];
+  let total = 0;
+  for (const d of decls) {
+    const folder = (db.prepare("SELECT folder_name FROM imports WHERE id = ?").get(d.import_id) as { folder_name: string } | undefined)?.folder_name ?? `import ${d.import_id}`;
+    const m = matchCustomsToProducts(db, d.import_id, d.decl_id);
+    perImport.push({ import_id: d.import_id, folder, matched: m });
+    total += m;
+  }
+  return { importsProcessed: decls.length, totalMatched: total, perImport };
 }
 
 export async function ingestAllCustoms(

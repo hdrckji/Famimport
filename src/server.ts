@@ -38,7 +38,7 @@ import {
   setAuthCookie,
   clearAuthCookie,
 } from "./web/auth.js";
-import { seedDb, seedPhotos, adminStatus, flattenPhotos, fixPhotoPaths } from "./web/admin.js";
+import { seedDb, seedPhotos, adminStatus, flattenPhotos, fixPhotoPaths, rematchCustoms } from "./web/admin.js";
 import { config } from "./config.js";
 
 const app = express();
@@ -217,6 +217,7 @@ app.post("/admin/seed-db", seedDb);
 app.post("/admin/seed-photos", seedPhotos);
 app.post("/admin/flatten-photos", flattenPhotos);
 app.post("/admin/fix-photo-paths", fixPhotoPaths);
+app.post("/admin/rematch-customs", rematchCustoms);
 
 app.get("/uploads/:id/export", async (req, res, next) => {
   try {

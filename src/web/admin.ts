@@ -93,6 +93,23 @@ export async function fixPhotoPaths(_req: express.Request, res: express.Response
   }
 }
 
+/**
+ * Re-run the customs→products matching using the improved heuristic
+ * (matches by both hs_china and existing internal estimate, and overwrites
+ * packing-list estimates with customs-validated codes).
+ */
+export async function rematchCustoms(_req: express.Request, res: express.Response): Promise<void> {
+  try {
+    const { getDb } = await import("./db.js");
+    const { rematchAllCustoms } = await import("../customs/ingest.js");
+    const db = getDb();
+    const result = rematchAllCustoms(db);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
 export async function adminStatus(_req: express.Request, res: express.Response): Promise<void> {
   const fs = await import("node:fs/promises");
   const result: Record<string, unknown> = {
