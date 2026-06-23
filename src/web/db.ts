@@ -18,21 +18,29 @@ export function getDb(): Database.Database {
 export interface DashboardStats {
   totalImports: number;
   totalProducts: number;
-  productsWithTarabel: number;
+  productsCustomsValidated: number;
+  productsInternalEstimate: number;
   productsWithEan: number;
   uniqueEans: number;
-  uniqueTarabelCodes: number;
+  uniqueCustomsCodes: number;
   totalDeclarations: number;
   totalCustomsLines: number;
   divergencePct: number;
 }
 
+const SOURCE_CUSTOMS = "tarabel_source = 'customs_pdf'";
+const SOURCE_PACKING =
+  "tarabel_validated IS NOT NULL AND tarabel_validated != '' AND (tarabel_source IS NULL OR tarabel_source != 'customs_pdf')";
+
 export function getDashboardStats(): DashboardStats {
   const db = getDb();
   const totalImports = (db.prepare("SELECT COUNT(*) AS c FROM imports").get() as { c: number }).c;
   const totalProducts = (db.prepare("SELECT COUNT(*) AS c FROM products").get() as { c: number }).c;
-  const productsWithTarabel = (db.prepare(
-    "SELECT COUNT(*) AS c FROM products WHERE tarabel_validated IS NOT NULL AND tarabel_validated != ''",
+  const productsCustomsValidated = (db.prepare(
+    `SELECT COUNT(*) AS c FROM products WHERE ${SOURCE_CUSTOMS}`,
+  ).get() as { c: number }).c;
+  const productsInternalEstimate = (db.prepare(
+    `SELECT COUNT(*) AS c FROM products WHERE ${SOURCE_PACKING}`,
   ).get() as { c: number }).c;
   const productsWithEan = (db.prepare(
     "SELECT COUNT(*) AS c FROM products WHERE ean IS NOT NULL AND ean != ''",
@@ -40,17 +48,18 @@ export function getDashboardStats(): DashboardStats {
   const uniqueEans = (db.prepare(
     "SELECT COUNT(DISTINCT ean) AS c FROM products WHERE ean IS NOT NULL AND ean != ''",
   ).get() as { c: number }).c;
-  const uniqueTarabelCodes = (db.prepare(
-    "SELECT COUNT(DISTINCT tarabel_validated) AS c FROM products WHERE tarabel_validated IS NOT NULL AND tarabel_validated != ''",
+  const uniqueCustomsCodes = (db.prepare(
+    `SELECT COUNT(DISTINCT tarabel_validated) AS c FROM products WHERE ${SOURCE_CUSTOMS}`,
   ).get() as { c: number }).c;
   const totalDeclarations = (db.prepare("SELECT COUNT(*) AS c FROM customs_declarations").get() as { c: number }).c;
   const totalCustomsLines = (db.prepare("SELECT COUNT(*) AS c FROM customs_lines").get() as { c: number }).c;
+  // Only compute divergence based on customs-validated codes (the trustworthy ones)
   const divergenceRow = db.prepare(`
     SELECT COUNT(*) AS total,
            SUM(CASE WHEN hs_china = tarabel_validated THEN 1 ELSE 0 END) AS matching
     FROM products
     WHERE hs_china IS NOT NULL AND hs_china != ''
-      AND tarabel_validated IS NOT NULL AND tarabel_validated != ''
+      AND ${SOURCE_CUSTOMS}
   `).get() as { total: number; matching: number };
   const divergencePct = divergenceRow.total
     ? Math.round(((divergenceRow.total - divergenceRow.matching) / divergenceRow.total) * 100)
@@ -58,10 +67,11 @@ export function getDashboardStats(): DashboardStats {
   return {
     totalImports,
     totalProducts,
-    productsWithTarabel,
+    productsCustomsValidated,
+    productsInternalEstimate,
     productsWithEan,
     uniqueEans,
-    uniqueTarabelCodes,
+    uniqueCustomsCodes,
     totalDeclarations,
     totalCustomsLines,
     divergencePct,
@@ -77,14 +87,16 @@ export interface ImportRow {
   ingested_at: string;
   schema_variant: string | null;
   declaration_count: number;
-  validated_count: number;
+  customs_validated_count: number;
+  internal_estimate_count: number;
 }
 
 export function listImports(): ImportRow[] {
   return getDb().prepare(`
     SELECT i.id, i.folder_name, i.brand, i.year, i.product_count, i.ingested_at, i.schema_variant,
            (SELECT COUNT(*) FROM customs_declarations WHERE import_id = i.id) AS declaration_count,
-           (SELECT COUNT(*) FROM products WHERE import_id = i.id AND tarabel_validated IS NOT NULL AND tarabel_validated != '') AS validated_count
+           (SELECT COUNT(*) FROM products WHERE import_id = i.id AND ${SOURCE_CUSTOMS}) AS customs_validated_count,
+           (SELECT COUNT(*) FROM products WHERE import_id = i.id AND ${SOURCE_PACKING}) AS internal_estimate_count
     FROM imports i
     ORDER BY i.year DESC, i.folder_name DESC
   `).all() as ImportRow[];
@@ -123,7 +135,8 @@ export function getImport(importId: number): ImportRow | undefined {
   return getDb().prepare(`
     SELECT i.id, i.folder_name, i.brand, i.year, i.product_count, i.ingested_at, i.schema_variant,
            (SELECT COUNT(*) FROM customs_declarations WHERE import_id = i.id) AS declaration_count,
-           (SELECT COUNT(*) FROM products WHERE import_id = i.id AND tarabel_validated IS NOT NULL AND tarabel_validated != '') AS validated_count
+           (SELECT COUNT(*) FROM products WHERE import_id = i.id AND ${SOURCE_CUSTOMS}) AS customs_validated_count,
+           (SELECT COUNT(*) FROM products WHERE import_id = i.id AND ${SOURCE_PACKING}) AS internal_estimate_count
     FROM imports i WHERE i.id = ?
   `).get(importId) as ImportRow | undefined;
 }
@@ -207,11 +220,16 @@ export interface TopCode {
   uses: number;
 }
 
+/**
+ * Top codes computed ONLY from customs-validated products.
+ * Internal-estimate codes are excluded to avoid amplifying possible
+ * classification errors from the internal collaborator.
+ */
 export function getTopTarabelCodes(limit: number = 15): TopCode[] {
   return getDb().prepare(`
     SELECT tarabel_validated AS code, COUNT(*) AS uses
     FROM products
-    WHERE tarabel_validated IS NOT NULL AND tarabel_validated != ''
+    WHERE ${SOURCE_CUSTOMS}
     GROUP BY tarabel_validated
     ORDER BY uses DESC LIMIT ?
   `).all(limit) as TopCode[];

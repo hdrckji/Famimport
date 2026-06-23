@@ -91,6 +91,10 @@ interface UIStrings {
   cardProductsSubWithEan: string;
   cardTarabel: string;
   cardTarabelSub: string;
+  cardCustomsValidated: string;
+  cardCustomsValidatedSub: string;
+  cardInternalEstimate: string;
+  cardInternalEstimateSub: string;
   cardUniqueCodes: string;
   cardUniqueCodesSub: string;
   cardDeclarations: string;
@@ -109,6 +113,10 @@ interface UIStrings {
   brand: string;
   products: string;
   tarabelCoverage: string;
+  customsValidated: string;
+  internalEstimate: string;
+  badgeCustomsValidated: string;
+  badgeInternalEstimate: string;
   customsPdf: string;
   sheet: string;
   validated: string;
@@ -161,8 +169,12 @@ const FR: UIStrings = {
   cardProductsSubWithEan: "avec EAN",
   cardTarabel: "Codes Tarabel validés",
   cardTarabelSub: "du catalogue",
-  cardUniqueCodes: "Codes uniques utilisés",
-  cardUniqueCodesSub: "Diversité du catalogue",
+  cardCustomsValidated: "Codes validés par la douane",
+  cardCustomsValidatedSub: "extraits des PDF douaniers — fiables à 100%",
+  cardInternalEstimate: "Codes estimés en interne",
+  cardInternalEstimateSub: "saisis dans le packing list — à confirmer",
+  cardUniqueCodes: "Codes uniques (douane)",
+  cardUniqueCodesSub: "diversité des codes validés douane",
   cardDeclarations: "Déclarations parsées",
   cardDeclarationsSub: "lignes douanières",
   cardUniqueEans: "EAN uniques",
@@ -179,6 +191,10 @@ const FR: UIStrings = {
   brand: "Marque",
   products: "Produits",
   tarabelCoverage: "Couverture Tarabel",
+  customsValidated: "Validé douane",
+  internalEstimate: "Estimé (interne)",
+  badgeCustomsValidated: "Validé douane",
+  badgeInternalEstimate: "Estimation interne",
   customsPdf: "PDF douane",
   sheet: "Onglet",
   validated: "Validés",
@@ -231,8 +247,12 @@ const NL: UIStrings = {
   cardProductsSubWithEan: "met EAN",
   cardTarabel: "Gevalideerde Tarabel-codes",
   cardTarabelSub: "van de catalogus",
-  cardUniqueCodes: "Unieke codes gebruikt",
-  cardUniqueCodesSub: "Diversiteit van de catalogus",
+  cardCustomsValidated: "Door douane gevalideerd",
+  cardCustomsValidatedSub: "uit douane-PDF's — 100% betrouwbaar",
+  cardInternalEstimate: "Intern geschat",
+  cardInternalEstimateSub: "ingevuld in paklijst — te bevestigen",
+  cardUniqueCodes: "Unieke codes (douane)",
+  cardUniqueCodesSub: "diversiteit van door douane gevalideerde codes",
   cardDeclarations: "Geparste aangiftes",
   cardDeclarationsSub: "douaneregels",
   cardUniqueEans: "Unieke EAN's",
@@ -249,6 +269,10 @@ const NL: UIStrings = {
   brand: "Merk",
   products: "Producten",
   tarabelCoverage: "Tarabel-dekking",
+  customsValidated: "Door douane",
+  internalEstimate: "Intern geschat",
+  badgeCustomsValidated: "Door douane gevalideerd",
+  badgeInternalEstimate: "Interne schatting",
   customsPdf: "Douane-PDF",
   sheet: "Tabblad",
   validated: "Gevalideerd",
