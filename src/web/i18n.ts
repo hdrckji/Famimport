@@ -82,6 +82,7 @@ interface UIStrings {
   navDashboard: string;
   navImports: string;
   navProducts: string;
+  navCodes: string;
   navUpload: string;
   navHistory: string;
   dashboardTitle: string;
@@ -160,6 +161,7 @@ const FR: UIStrings = {
   navDashboard: "Tableau de bord",
   navImports: "Imports passés",
   navProducts: "Catalogue",
+  navCodes: "Codes Tarabel",
   navUpload: "Vérifier un import",
   navHistory: "Mes vérifications",
   dashboardTitle: "Tableau de bord",
@@ -238,6 +240,7 @@ const NL: UIStrings = {
   navDashboard: "Dashboard",
   navImports: "Vorige imports",
   navProducts: "Catalogus",
+  navCodes: "Tarabel-codes",
   navUpload: "Import verifiëren",
   navHistory: "Mijn verificaties",
   dashboardTitle: "Dashboard",

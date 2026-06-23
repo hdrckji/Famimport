@@ -10,6 +10,8 @@ import {
   getProduct,
   getTopTarabelCodes,
   getEanHistory,
+  listTarabelCodes,
+  getTarabelCode,
 } from "./web/db.js";
 import {
   renderDashboard,
@@ -23,6 +25,7 @@ import {
   renderUploadForm,
   renderUploadDetail,
 } from "./web/views-upload.js";
+import { renderCodesList, renderCodeDetail } from "./web/views-codes.js";
 import {
   processUpload,
   getUpload,
@@ -174,6 +177,40 @@ app.get("/products/:id", (req, res) => {
   }
   const history = p.ean ? getEanHistory(p.ean) : [p];
   res.send(renderProductDetail(p, history, lang));
+});
+
+// Tarabel codes reference
+app.get("/codes", (req, res) => {
+  const lang = getLang(req);
+  const filters = {
+    q: String(req.query.q ?? ""),
+    orderBy: String(req.query.orderBy ?? ""),
+  };
+  const page = Math.max(1, Number(req.query.page ?? 1));
+  const limit = 50;
+  const offset = (page - 1) * limit;
+  const result = listTarabelCodes({
+    q: filters.q || undefined,
+    orderBy: filters.orderBy === "code" ? "code" : "uses",
+    limit,
+    offset,
+  });
+  res.send(renderCodesList(filters, result, page, limit, lang));
+});
+
+app.get("/codes/:code", (req, res) => {
+  const lang = getLang(req);
+  const code = req.params.code.replace(/\D/g, "");
+  if (code.length === 0) {
+    res.status(404).send("Code invalid");
+    return;
+  }
+  const detail = getTarabelCode(code);
+  if (!detail) {
+    res.status(404).send(`Code ${code} not found in catalog`);
+    return;
+  }
+  res.send(renderCodeDetail(detail, lang));
 });
 
 app.get("/upload", (req, res) => {

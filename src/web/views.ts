@@ -64,8 +64,8 @@ export function renderDashboard(
     </tr>`).join("");
 
   const codesRows = topCodes.map((c) => `
-    <tr class="border-b border-slate-100">
-      <td class="py-1.5 px-3 font-mono text-sm">${escapeHtml(c.code)}</td>
+    <tr class="border-b border-slate-100 hover:bg-slate-50">
+      <td class="py-1.5 px-3 font-mono text-sm"><a href="/codes/${c.code}" class="text-blue-600 hover:underline">${escapeHtml(c.code)}</a></td>
       <td class="py-1.5 px-3 text-right text-sm">${c.uses}</td>
     </tr>`).join("");
 
@@ -168,7 +168,7 @@ export function renderImportDetail(imp: ImportRow, products: ProductRow[], lang:
       : `<div class="w-12 h-12 bg-slate-100 rounded flex items-center justify-center text-slate-300 text-xs">—</div>`;
     const isCustoms = p.tarabel_source === "customs_pdf";
     const tarabelCell = p.tarabel_validated
-      ? `<span class="font-mono text-sm">${escapeHtml(p.tarabel_validated)}</span>
+      ? `<a href="/codes/${p.tarabel_validated}" class="font-mono text-sm text-blue-600 hover:underline">${escapeHtml(p.tarabel_validated)}</a>
          <span class="inline-block ml-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${isCustoms ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}" title="${escapeHtml(isCustoms ? tr.cardCustomsValidatedSub : tr.cardInternalEstimateSub)}">${escapeHtml(isCustoms ? tr.badgeCustomsValidated : tr.badgeInternalEstimate)}</span>`
       : `<span class="text-slate-400 text-xs">—</span>`;
     const divergent = p.hs_china && p.tarabel_validated && p.hs_china !== p.tarabel_validated;
@@ -226,7 +226,7 @@ export function renderProductsSearch(filters: Record<string, string>, results: S
       : `<div class="w-16 h-16 bg-slate-100 rounded flex items-center justify-center text-slate-300 text-xs">—</div>`;
     const isCustoms = p.tarabel_source === "customs_pdf";
     const tarabel = p.tarabel_validated
-      ? `<span class="font-mono text-xs px-1.5 py-0.5 rounded ${isCustoms ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"}" title="${escapeHtml(isCustoms ? tr.cardCustomsValidatedSub : tr.cardInternalEstimateSub)}">${escapeHtml(p.tarabel_validated)}</span>`
+      ? `<a href="/codes/${p.tarabel_validated}" class="font-mono text-xs px-1.5 py-0.5 rounded ${isCustoms ? "bg-green-50 text-green-800 hover:bg-green-100" : "bg-yellow-50 text-yellow-800 hover:bg-yellow-100"}" title="${escapeHtml(isCustoms ? tr.cardCustomsValidatedSub : tr.cardInternalEstimateSub)}">${escapeHtml(p.tarabel_validated)}</a>`
       : `<span class="text-slate-400 text-xs">—</span>`;
     return `
     <tr class="border-b border-slate-100">
@@ -313,13 +313,13 @@ export function renderProductDetail(p: ProductRow, history: ProductRow[], lang: 
     : `<div class="bg-slate-100 rounded-lg p-12 text-center text-slate-400">${escapeHtml(tr.noPhoto)}</div>`;
   const codesUsed = [...new Set(history.map((h) => h.tarabel_validated).filter(Boolean))] as string[];
   const codesWarning = codesUsed.length > 1
-    ? `<div class="bg-yellow-50 border border-yellow-200 rounded p-3 mb-3 text-sm text-yellow-800">⚠️ ${escapeHtml(tr.productHistoryWarning)} <strong>${codesUsed.length}</strong> codes : ${codesUsed.map((c) => `<code class="bg-yellow-100 px-1 rounded">${escapeHtml(c)}</code>`).join(" · ")}</div>`
+    ? `<div class="bg-yellow-50 border border-yellow-200 rounded p-3 mb-3 text-sm text-yellow-800">⚠️ ${escapeHtml(tr.productHistoryWarning)} <strong>${codesUsed.length}</strong> codes : ${codesUsed.map((c) => `<a href="/codes/${c}" class="bg-yellow-100 px-1 rounded hover:bg-yellow-200 font-mono">${escapeHtml(c)}</a>`).join(" · ")}</div>`
     : "";
   const historyRows = history.map((h) => `
     <tr class="border-b border-slate-100 ${h.id === p.id ? "bg-blue-50" : ""}">
       <td class="py-2 px-3 text-sm"><a href="/imports/${h.import_id}" class="text-blue-600 hover:underline">${escapeHtml(h.folder_name)}</a></td>
       <td class="py-2 px-3 text-xs font-mono">${escapeHtml(h.hs_china ?? "—")}</td>
-      <td class="py-2 px-3 text-xs font-mono">${escapeHtml(h.tarabel_validated ?? "—")}</td>
+      <td class="py-2 px-3 text-xs font-mono">${h.tarabel_validated ? `<a href="/codes/${h.tarabel_validated}" class="text-blue-600 hover:underline">${escapeHtml(h.tarabel_validated)}</a>` : "—"}</td>
       <td class="py-2 px-3 text-xs text-right">${h.price_usd ?? ""}</td>
       <td class="py-2 px-3 text-xs text-right">${h.quantity ?? ""}</td>
     </tr>`).join("");
@@ -343,10 +343,10 @@ export function renderProductDetail(p: ProductRow, history: ProductRow[], lang: 
           <dt class="text-slate-500">${escapeHtml(tr.ean)}</dt><dd class="font-mono">${escapeHtml(p.ean ?? "—")}</dd>
           <dt class="text-slate-500">${escapeHtml(tr.material)}</dt><dd>${materialCell(p.material, lang) || "—"}</dd>
           <dt class="text-slate-500">${escapeHtml(tr.hsChina)}</dt><dd class="font-mono">${escapeHtml(p.hs_china ?? "—")}</dd>
-          <dt class="text-slate-500">${escapeHtml(tr.tarabel)}</dt><dd class="font-mono">${escapeHtml(p.tarabel_validated ?? "—")} ${
+          <dt class="text-slate-500">${escapeHtml(tr.tarabel)}</dt><dd class="font-mono">${
             p.tarabel_validated
-              ? `<span class="inline-block ml-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.tarabel_source === "customs_pdf" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}" title="${escapeHtml(p.tarabel_source === "customs_pdf" ? tr.cardCustomsValidatedSub : tr.cardInternalEstimateSub)}">${escapeHtml(p.tarabel_source === "customs_pdf" ? tr.badgeCustomsValidated : tr.badgeInternalEstimate)}</span>`
-              : ""
+              ? `<a href="/codes/${p.tarabel_validated}" class="text-blue-600 hover:underline">${escapeHtml(p.tarabel_validated)}</a> <span class="inline-block ml-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.tarabel_source === "customs_pdf" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}" title="${escapeHtml(p.tarabel_source === "customs_pdf" ? tr.cardCustomsValidatedSub : tr.cardInternalEstimateSub)}">${escapeHtml(p.tarabel_source === "customs_pdf" ? tr.badgeCustomsValidated : tr.badgeInternalEstimate)}</span>`
+              : "—"
           }</dd>
           <dt class="text-slate-500">${escapeHtml(tr.invoer)}</dt><dd>${p.invoer_pct != null ? (p.invoer_pct * 100).toFixed(2) + "%" : "—"}</dd>
           <dt class="text-slate-500">${escapeHtml(tr.priceUsd)}</dt><dd>${p.price_usd ?? "—"}</dd>

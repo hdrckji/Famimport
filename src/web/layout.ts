@@ -24,6 +24,7 @@ export function layout(title: string, body: string, activeNav: string, lang: Lan
       <a href="/uploads" class="${navCls(activeNav, "uploads-list")}">${escapeHtml(tr.navHistory)}</a>
       <a href="/imports" class="${navCls(activeNav, "imports")}">${escapeHtml(tr.navImports)}</a>
       <a href="/products" class="${navCls(activeNav, "products")}">${escapeHtml(tr.navProducts)}</a>
+      <a href="/codes" class="${navCls(activeNav, "codes")}">${escapeHtml(tr.navCodes)}</a>
       <div class="ml-auto flex items-center gap-2">
         ${helpButtonAndModal(lang)}
         <span class="text-xs text-slate-400">${lang === "fr" ? "FR" : "NL"}</span>

@@ -93,11 +93,11 @@ export function renderUploadDetail(upload: UploadSummary, rows: UploadRow[], lan
       : `<div class="w-12 h-12 bg-slate-100 rounded"></div>`;
     const divergent = r.hs_china && r.suggested_code && r.hs_china !== r.suggested_code;
     const codeBadge = r.suggested_code
-      ? `<span class="font-mono text-xs px-1.5 py-0.5 rounded ${
-          r.suggestion_confidence === "high" ? "bg-green-100 text-green-800"
-          : r.suggestion_confidence === "medium" ? "bg-yellow-100 text-yellow-800"
-          : "bg-red-100 text-red-800"
-        }">${escapeHtml(r.suggested_code)}</span>`
+      ? `<a href="/codes/${r.suggested_code}" class="font-mono text-xs px-1.5 py-0.5 rounded ${
+          r.suggestion_confidence === "high" ? "bg-green-100 text-green-800 hover:bg-green-200"
+          : r.suggestion_confidence === "medium" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+          : "bg-red-100 text-red-800 hover:bg-red-200"
+        }">${escapeHtml(r.suggested_code)}</a>`
       : `<span class="text-xs text-slate-400">${lang === "fr" ? "à classer" : "te classificeren"}</span>`;
     return `
       <tr class="border-b border-slate-100">

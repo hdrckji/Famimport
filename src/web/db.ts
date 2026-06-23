@@ -235,6 +235,167 @@ export function getTopTarabelCodes(limit: number = 15): TopCode[] {
   `).all(limit) as TopCode[];
 }
 
+export interface TarabelCodeSummary {
+  code: string;
+  description: string | null;
+  duty_rate: number | null;
+  vat_rate: number | null;
+  product_count: number;
+  customs_validated_count: number;
+  internal_estimate_count: number;
+  customs_line_count: number;
+  sample_product_id: number | null;
+  sample_photo_path: string | null;
+}
+
+export interface TarabelCodeListResult {
+  total: number;
+  rows: TarabelCodeSummary[];
+}
+
+export function listTarabelCodes(filter: { q?: string; limit?: number; offset?: number; orderBy?: "code" | "uses" }): TarabelCodeListResult {
+  const limit = filter.limit ?? 50;
+  const offset = filter.offset ?? 0;
+  const orderBy = filter.orderBy === "code" ? "code ASC" : "product_count DESC, code ASC";
+
+  const params: Array<string | number> = [];
+  let whereSql = "";
+  if (filter.q) {
+    const like = `%${filter.q}%`;
+    whereSql = "WHERE code LIKE ? OR description LIKE ?";
+    params.push(like, like);
+  }
+
+  const baseCte = `
+    WITH all_codes AS (
+      SELECT tarabel_validated AS code FROM products WHERE tarabel_validated IS NOT NULL AND tarabel_validated != ''
+      UNION
+      SELECT hs_code AS code FROM customs_lines
+    ),
+    code_descriptions AS (
+      SELECT hs_code AS code,
+             description,
+             duty_rate,
+             vat_rate,
+             ROW_NUMBER() OVER (PARTITION BY hs_code ORDER BY LENGTH(COALESCE(description, '')) DESC) AS rn
+      FROM customs_lines
+      WHERE description IS NOT NULL AND description != ''
+    ),
+    code_stats AS (
+      SELECT
+        ac.code,
+        (SELECT description FROM code_descriptions WHERE code = ac.code AND rn = 1) AS description,
+        (SELECT duty_rate FROM code_descriptions WHERE code = ac.code AND rn = 1) AS duty_rate,
+        (SELECT vat_rate FROM code_descriptions WHERE code = ac.code AND rn = 1) AS vat_rate,
+        (SELECT COUNT(*) FROM products WHERE tarabel_validated = ac.code) AS product_count,
+        (SELECT COUNT(*) FROM products WHERE tarabel_validated = ac.code AND tarabel_source = 'customs_pdf') AS customs_validated_count,
+        (SELECT COUNT(*) FROM products WHERE tarabel_validated = ac.code AND (tarabel_source IS NULL OR tarabel_source != 'customs_pdf')) AS internal_estimate_count,
+        (SELECT COUNT(*) FROM customs_lines WHERE hs_code = ac.code) AS customs_line_count,
+        (SELECT id FROM products WHERE tarabel_validated = ac.code AND photo_path IS NOT NULL AND photo_path != '' LIMIT 1) AS sample_product_id,
+        (SELECT photo_path FROM products WHERE tarabel_validated = ac.code AND photo_path IS NOT NULL AND photo_path != '' LIMIT 1) AS sample_photo_path
+      FROM all_codes ac
+      GROUP BY ac.code
+    )
+  `;
+
+  const total = (getDb().prepare(`${baseCte} SELECT COUNT(*) AS c FROM code_stats ${whereSql}`).get(...params) as { c: number }).c;
+
+  const rows = getDb().prepare(`
+    ${baseCte}
+    SELECT * FROM code_stats
+    ${whereSql}
+    ORDER BY ${orderBy}
+    LIMIT ? OFFSET ?
+  `).all(...params, limit, offset) as TarabelCodeSummary[];
+
+  return { total, rows };
+}
+
+export interface TarabelCodeDetail {
+  code: string;
+  description: string | null;
+  duty_rate: number | null;
+  vat_rate: number | null;
+  alt_descriptions: string[];
+  product_count: number;
+  customs_validated_count: number;
+  internal_estimate_count: number;
+  customs_line_count: number;
+  declarations: Array<{
+    import_id: number;
+    folder_name: string;
+    line_number: number;
+    description: string | null;
+    net_mass: number | null;
+    statistical_value: number | null;
+  }>;
+  products: ProductRow[];
+}
+
+export function getTarabelCode(code: string): TarabelCodeDetail | undefined {
+  const customsLines = getDb().prepare(`
+    SELECT cl.line_number, cl.description, cl.duty_rate, cl.vat_rate, cl.net_mass, cl.statistical_value,
+           cd.import_id, i.folder_name
+    FROM customs_lines cl
+    JOIN customs_declarations cd ON cl.declaration_id = cd.id
+    JOIN imports i ON cd.import_id = i.id
+    WHERE cl.hs_code = ?
+    ORDER BY i.year DESC, i.folder_name
+  `).all(code) as Array<{
+    line_number: number; description: string | null; duty_rate: number | null; vat_rate: number | null;
+    net_mass: number | null; statistical_value: number | null; import_id: number; folder_name: string;
+  }>;
+
+  const products = getDb().prepare(`
+    SELECT p.*, i.folder_name
+    FROM products p JOIN imports i ON p.import_id = i.id
+    WHERE p.tarabel_validated = ?
+    ORDER BY (p.tarabel_source = 'customs_pdf') DESC, i.year DESC, p.id DESC
+  `).all(code) as ProductRow[];
+
+  if (customsLines.length === 0 && products.length === 0) return undefined;
+
+  // Pick the longest description as primary; keep distinct alternatives
+  const descriptions = customsLines
+    .map((l) => l.description)
+    .filter((d): d is string => !!d && d.trim().length > 0);
+  const distinctDescriptions = [...new Set(descriptions.map((d) => d.trim()))];
+  const sorted = [...distinctDescriptions].sort((a, b) => b.length - a.length);
+  const primary = sorted[0] ?? null;
+  const alts = sorted.slice(1);
+
+  const dutyRates = customsLines.map((l) => l.duty_rate).filter((r): r is number => r != null);
+  const vatRates = customsLines.map((l) => l.vat_rate).filter((r): r is number => r != null);
+
+  const stats = getDb().prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM products WHERE tarabel_validated = ?) AS product_count,
+      (SELECT COUNT(*) FROM products WHERE tarabel_validated = ? AND tarabel_source = 'customs_pdf') AS customs_validated_count,
+      (SELECT COUNT(*) FROM products WHERE tarabel_validated = ? AND (tarabel_source IS NULL OR tarabel_source != 'customs_pdf')) AS internal_estimate_count
+  `).get(code, code, code) as { product_count: number; customs_validated_count: number; internal_estimate_count: number };
+
+  return {
+    code,
+    description: primary,
+    duty_rate: dutyRates.length > 0 ? dutyRates[0] : null,
+    vat_rate: vatRates.length > 0 ? vatRates[0] : null,
+    alt_descriptions: alts,
+    product_count: stats.product_count,
+    customs_validated_count: stats.customs_validated_count,
+    internal_estimate_count: stats.internal_estimate_count,
+    customs_line_count: customsLines.length,
+    declarations: customsLines.map((l) => ({
+      import_id: l.import_id,
+      folder_name: l.folder_name,
+      line_number: l.line_number,
+      description: l.description,
+      net_mass: l.net_mass,
+      statistical_value: l.statistical_value,
+    })),
+    products,
+  };
+}
+
 export interface EanHistoryRow {
   product: ProductRow;
   imports: number;
