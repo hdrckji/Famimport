@@ -77,6 +77,22 @@ export async function flattenPhotos(_req: express.Request, res: express.Response
   }
 }
 
+/**
+ * Convert all backslashes in products.photo_path to forward slashes.
+ * Needed when the catalog was ingested on Windows but served on Linux.
+ */
+export async function fixPhotoPaths(_req: express.Request, res: express.Response): Promise<void> {
+  try {
+    const { getDb } = await import("./db.js");
+    const db = getDb();
+    const before = (db.prepare("SELECT COUNT(*) AS c FROM products WHERE photo_path LIKE '%\\%'").get() as { c: number }).c;
+    const result = db.prepare("UPDATE products SET photo_path = REPLACE(photo_path, '\\', '/') WHERE photo_path LIKE '%\\%'").run();
+    res.json({ ok: true, before, updated: result.changes });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
 export async function adminStatus(_req: express.Request, res: express.Response): Promise<void> {
   const fs = await import("node:fs/promises");
   const result: Record<string, unknown> = {
