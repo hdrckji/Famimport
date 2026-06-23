@@ -1,5 +1,6 @@
 import type { Lang } from "./i18n.js";
 import { t } from "./i18n.js";
+import { helpButtonAndModal } from "./help.js";
 
 export function layout(title: string, body: string, activeNav: string, lang: Lang, currentPath: string): string {
   const tr = t(lang);
@@ -23,9 +24,12 @@ export function layout(title: string, body: string, activeNav: string, lang: Lan
       <a href="/uploads" class="${navCls(activeNav, "uploads-list")}">${escapeHtml(tr.navHistory)}</a>
       <a href="/imports" class="${navCls(activeNav, "imports")}">${escapeHtml(tr.navImports)}</a>
       <a href="/products" class="${navCls(activeNav, "products")}">${escapeHtml(tr.navProducts)}</a>
-      <span class="ml-auto text-xs text-slate-400">${lang === "fr" ? "FR" : "NL"}</span>
-      <a href="${switchUrl}" class="text-xs px-2 py-1 rounded border border-slate-300 hover:bg-slate-100" title="${lang === "fr" ? "Schakelen naar Nederlands" : "Passer en français"}">${otherLang.toUpperCase()}</a>
-      <form method="POST" action="/logout" class="m-0"><button type="submit" class="text-xs px-2 py-1 rounded border border-slate-300 hover:bg-slate-100 text-slate-600" title="${lang === "fr" ? "Se déconnecter" : "Uitloggen"}">${lang === "fr" ? "Déconnexion" : "Uitloggen"}</button></form>
+      <div class="ml-auto flex items-center gap-2">
+        ${helpButtonAndModal(lang)}
+        <span class="text-xs text-slate-400">${lang === "fr" ? "FR" : "NL"}</span>
+        <a href="${switchUrl}" class="text-xs px-2 py-1 rounded border border-slate-300 hover:bg-slate-100" title="${lang === "fr" ? "Schakelen naar Nederlands" : "Passer en français"}">${otherLang.toUpperCase()}</a>
+        <form method="POST" action="/logout" class="m-0"><button type="submit" class="text-xs px-2 py-1 rounded border border-slate-300 hover:bg-slate-100 text-slate-600" title="${lang === "fr" ? "Se déconnecter" : "Uitloggen"}">${lang === "fr" ? "Déconnexion" : "Uitloggen"}</button></form>
+      </div>
     </div>
   </nav>
   <main class="max-w-7xl mx-auto px-4 py-6">
