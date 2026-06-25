@@ -89,11 +89,14 @@ export interface ImportRow {
   declaration_count: number;
   customs_validated_count: number;
   internal_estimate_count: number;
+  phase: string | null;
+  upload_id: number | null;
 }
 
 export function listImports(): ImportRow[] {
   return getDb().prepare(`
     SELECT i.id, i.folder_name, i.brand, i.year, i.product_count, i.ingested_at, i.schema_variant,
+           i.phase, i.upload_id,
            (SELECT COUNT(*) FROM customs_declarations WHERE import_id = i.id) AS declaration_count,
            (SELECT COUNT(*) FROM products WHERE import_id = i.id AND ${SOURCE_CUSTOMS}) AS customs_validated_count,
            (SELECT COUNT(*) FROM products WHERE import_id = i.id AND ${SOURCE_PACKING}) AS internal_estimate_count
@@ -134,6 +137,7 @@ export function listProductsForImport(importId: number): ProductRow[] {
 export function getImport(importId: number): ImportRow | undefined {
   return getDb().prepare(`
     SELECT i.id, i.folder_name, i.brand, i.year, i.product_count, i.ingested_at, i.schema_variant,
+           i.phase, i.upload_id,
            (SELECT COUNT(*) FROM customs_declarations WHERE import_id = i.id) AS declaration_count,
            (SELECT COUNT(*) FROM products WHERE import_id = i.id AND ${SOURCE_CUSTOMS}) AS customs_validated_count,
            (SELECT COUNT(*) FROM products WHERE import_id = i.id AND ${SOURCE_PACKING}) AS internal_estimate_count

@@ -187,6 +187,29 @@ export function renderImportDetail(imp: ImportRow, products: ProductRow[], lang:
   }).join("");
   const customsPct = imp.product_count ? Math.round((imp.customs_validated_count / imp.product_count) * 100) : 0;
   const internalPct = imp.product_count ? Math.round((imp.internal_estimate_count / imp.product_count) * 100) : 0;
+  const awaitingCustoms = imp.phase === "awaiting_customs" && imp.declaration_count === 0;
+  const pdfBlock = awaitingCustoms
+    ? `
+      <div class="mb-4 bg-amber-50 border border-amber-200 rounded p-3 text-sm flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          ${lang === "fr"
+            ? "Import en attente du PDF douanier. Dépose-le ici dès qu'il arrive — le système upgrade les codes estimés en codes validés douane."
+            : "Import wacht op douane-PDF. Sleep deze hier zodra hij beschikbaar is."}
+        </div>
+        <form action="/imports/${imp.id}/attach-pdf" method="POST" enctype="multipart/form-data" class="flex items-center gap-2">
+          <input type="file" name="pdf" accept=".pdf" required class="text-xs border border-slate-300 rounded p-1">
+          <button type="submit" class="bg-amber-600 text-white px-3 py-1 rounded text-sm font-medium hover:bg-amber-700">
+            ${lang === "fr" ? "Attacher PDF douanier" : "Douane-PDF koppelen"}
+          </button>
+        </form>
+      </div>
+    `
+    : imp.declaration_count > 0
+      ? `<div class="mb-4 bg-green-50 border border-green-200 rounded p-3 text-sm">${lang === "fr" ? `✓ PDF douanier attaché (${imp.declaration_count} déclaration${imp.declaration_count > 1 ? "s" : ""})` : `✓ Douane-PDF gekoppeld (${imp.declaration_count} aangifte${imp.declaration_count > 1 ? "s" : ""})`}</div>`
+      : "";
+  const sourceLink = imp.upload_id
+    ? `<a href="/uploads/${imp.upload_id}" class="text-xs text-blue-600 hover:underline">${lang === "fr" ? "← vérification d'origine" : "← oorspronkelijke verificatie"}</a>`
+    : "";
   const body = `
     <div class="mb-4 flex items-center gap-3 flex-wrap">
       <a href="/imports" class="text-blue-600 text-sm hover:underline">${escapeHtml(tr.backToImports)}</a>
@@ -194,7 +217,9 @@ export function renderImportDetail(imp: ImportRow, products: ProductRow[], lang:
       <span class="text-sm text-slate-500">${imp.year} · ${escapeHtml(imp.brand ?? "")} · ${imp.product_count} ${escapeHtml(tr.importDetailHint)} · ${escapeHtml(tr.sheet)} "${escapeHtml(imp.schema_variant ?? "")}"</span>
       <span class="inline-block px-2 py-0.5 text-xs rounded bg-green-100 text-green-800 ml-2">${imp.customs_validated_count} ${escapeHtml(tr.customsValidated.toLowerCase())} (${customsPct}%)</span>
       <span class="inline-block px-2 py-0.5 text-xs rounded bg-yellow-100 text-yellow-800">${imp.internal_estimate_count} ${escapeHtml(tr.internalEstimate.toLowerCase())} (${internalPct}%)</span>
+      ${sourceLink}
     </div>
+    ${pdfBlock}
     <div class="bg-white rounded-lg border border-slate-200 overflow-x-auto">
       <table class="w-full">
         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
