@@ -41,13 +41,17 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
     source: auditStart + 1,
     confidence: auditStart + 2,
     decision: auditStart + 3,
-    note: auditStart + 4,
+    materialOk: auditStart + 4,
+    materialNote: auditStart + 5,
+    note: auditStart + 6,
   };
   const auditHeaders: Array<[number, string]> = [
     [auditCols.finalCode, "Code final"],
     [auditCols.source, "Source"],
     [auditCols.confidence, "Confiance"],
     [auditCols.decision, "Décision"],
+    [auditCols.materialOk, "Matériau vérifié"],
+    [auditCols.materialNote, "Matériau (note Claude)"],
     [auditCols.note, "Note"],
   ];
   for (const [col, label] of auditHeaders) {
@@ -58,13 +62,45 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
 
   for (const r of rows) {
     const target = sheet.getRow(r.row_index);
-    const finalCode = r.user_code ?? r.suggested_code ?? null;
-    const decision = r.user_decision ?? (finalCode ? "auto" : "à compléter");
+
+    // Catalog suggestion wins. If absent and Claude has produced something, fall back to Claude.
+    const fromCatalog = r.user_code != null || (r.suggested_code != null && r.suggested_code !== "");
+    const finalCode =
+      r.user_code ??
+      r.suggested_code ??
+      (r.claude_status === "done" ? r.claude_code : null) ??
+      null;
+    const finalInvoer =
+      r.user_code != null
+        ? r.suggested_invoer_pct
+        : r.suggested_code != null
+          ? r.suggested_invoer_pct
+          : r.claude_status === "done"
+            ? r.claude_invoer_pct
+            : null;
+    const finalSource = r.user_code
+      ? "manual"
+      : r.suggested_code
+        ? r.suggestion_source ?? ""
+        : r.claude_status === "done"
+          ? "claude_vision"
+          : r.claude_status ?? "";
+    const finalConfidence = fromCatalog
+      ? r.suggestion_confidence ?? ""
+      : r.claude_status === "done"
+        ? r.claude_confidence ?? ""
+        : "";
+    const finalNote = fromCatalog
+      ? r.suggestion_note ?? ""
+      : r.claude_status === "done"
+        ? r.claude_justification ?? ""
+        : r.claude_error ?? r.suggestion_note ?? "";
+    const decision = r.user_decision ?? (finalCode ? (fromCatalog ? "auto-catalogue" : "auto-claude") : "à compléter");
 
     if (finalCode) {
       target.getCell(intrastatCol).value = finalCode;
-      if (r.suggested_invoer_pct != null) {
-        target.getCell(invoerCol).value = r.suggested_invoer_pct;
+      if (finalInvoer != null) {
+        target.getCell(invoerCol).value = finalInvoer;
         target.getCell(invoerCol).numFmt = "0.00%";
       }
     }
@@ -81,21 +117,29 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
     }
 
     target.getCell(auditCols.finalCode).value = finalCode;
-    target.getCell(auditCols.source).value = r.suggestion_source ?? "";
-    target.getCell(auditCols.confidence).value = r.suggestion_confidence ?? "";
+    target.getCell(auditCols.source).value = finalSource;
+    target.getCell(auditCols.confidence).value = finalConfidence;
     target.getCell(auditCols.decision).value = decision;
-    target.getCell(auditCols.note).value = r.suggestion_note ?? "";
+    target.getCell(auditCols.materialOk).value =
+      r.claude_material_confirmed == null ? "" : r.claude_material_confirmed ? "OK" : "DIVERGENT";
+    target.getCell(auditCols.materialNote).value = r.claude_material_note ?? "";
+    target.getCell(auditCols.note).value = finalNote;
 
     const fill =
-      r.suggestion_confidence === "high"
+      finalConfidence === "high"
         ? FILL_HIGH
-        : r.suggestion_confidence === "medium"
+        : finalConfidence === "medium"
           ? FILL_MEDIUM
-          : r.suggestion_confidence === "low"
+          : finalConfidence === "low"
             ? FILL_LOW
             : FILL_NONE;
     target.getCell(auditCols.confidence).fill = fill;
     target.getCell(intrastatCol).fill = fill;
+    if (r.claude_material_confirmed === 0) {
+      target.getCell(auditCols.materialOk).fill = FILL_LOW;
+    } else if (r.claude_material_confirmed === 1) {
+      target.getCell(auditCols.materialOk).fill = FILL_HIGH;
+    }
     target.commit();
   }
 

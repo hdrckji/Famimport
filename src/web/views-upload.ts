@@ -1,6 +1,7 @@
 import { escapeHtml, layout } from "./layout.js";
 import { translateMaterial, t, type Lang } from "./i18n.js";
 import type { UploadRow, UploadSummary } from "./upload.js";
+import { getPromotedImportId } from "./promote.js";
 
 function materialCell(raw: string | null, lang: Lang): string {
   if (!raw) return "";
@@ -77,42 +78,153 @@ export function renderUploadForm(lang: Lang, error?: string): string {
   return layout(lang === "fr" ? "Nouvel import" : "Nieuwe import", body, "uploads", lang, "/upload");
 }
 
+function effectiveCode(r: UploadRow): { code: string | null; confidence: string | null; source: string; note: string; fromClaude: boolean } {
+  if (r.user_code) {
+    return { code: r.user_code, confidence: r.suggestion_confidence, source: "manuel", note: r.suggestion_note ?? "", fromClaude: false };
+  }
+  if (r.suggested_code) {
+    return {
+      code: r.suggested_code,
+      confidence: r.suggestion_confidence,
+      source: r.suggestion_source ?? "catalogue",
+      note: r.suggestion_note ?? "",
+      fromClaude: false,
+    };
+  }
+  if (r.claude_status === "done" && r.claude_code) {
+    return {
+      code: r.claude_code,
+      confidence: r.claude_confidence,
+      source: "claude_vision",
+      note: r.claude_justification ?? "",
+      fromClaude: true,
+    };
+  }
+  return { code: null, confidence: null, source: r.claude_status ?? "", note: r.claude_error ?? "", fromClaude: false };
+}
+
 export function renderUploadDetail(upload: UploadSummary, rows: UploadRow[], lang: Lang): string {
   const tr = t(lang);
   const total = rows.length;
+  const eff = rows.map(effectiveCode);
   const counts = {
-    high: rows.filter((r) => r.suggestion_confidence === "high").length,
-    medium: rows.filter((r) => r.suggestion_confidence === "medium").length,
-    low: rows.filter((r) => r.suggestion_confidence === "low").length,
-    none: rows.filter((r) => !r.suggestion_confidence || r.suggestion_confidence === "none").length,
+    high: eff.filter((e) => e.confidence === "high").length,
+    medium: eff.filter((e) => e.confidence === "medium").length,
+    low: eff.filter((e) => e.confidence === "low").length,
+    none: eff.filter((e) => !e.confidence || e.confidence === "none").length,
   };
 
-  const rowsHtml = rows.map((r) => {
+  const claudeTotal = upload.claude_total ?? 0;
+  const claudeProcessed = upload.claude_processed ?? 0;
+  const claudeErrors = upload.claude_errors ?? 0;
+  const claudeActive = upload.claude_status === "processing" && claudeTotal > 0;
+  const claudePct = claudeTotal > 0 ? Math.round((claudeProcessed / claudeTotal) * 100) : 0;
+
+  const rowsHtml = rows.map((r, i) => {
+    const e = eff[i];
     const photo = r.photo_path
       ? `<img src="/upload-photo/${encodeURIComponent(r.photo_path)}" class="w-12 h-12 object-cover rounded" loading="lazy">`
       : `<div class="w-12 h-12 bg-slate-100 rounded"></div>`;
-    const divergent = r.hs_china && r.suggested_code && r.hs_china !== r.suggested_code;
-    const codeBadge = r.suggested_code
-      ? `<a href="/codes/${r.suggested_code}" class="font-mono text-xs px-1.5 py-0.5 rounded ${
-          r.suggestion_confidence === "high" ? "bg-green-100 text-green-800 hover:bg-green-200"
-          : r.suggestion_confidence === "medium" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-          : "bg-red-100 text-red-800 hover:bg-red-200"
-        }">${escapeHtml(r.suggested_code)}</a>`
-      : `<span class="text-xs text-slate-400">${lang === "fr" ? "à classer" : "te classificeren"}</span>`;
+    const divergent = r.hs_china && e.code && r.hs_china !== e.code;
+
+    let codeBadge: string;
+    if (e.code) {
+      const colorClasses =
+        e.confidence === "high" ? "bg-green-100 text-green-800 hover:bg-green-200"
+        : e.confidence === "medium" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+        : "bg-red-100 text-red-800 hover:bg-red-200";
+      const claudeIcon = e.fromClaude
+        ? `<span class="inline-block ml-1 px-1 text-[9px] font-bold rounded bg-purple-100 text-purple-800" title="${lang === "fr" ? "Suggéré par Claude vision" : "Voorgesteld door Claude vision"}">IA</span>`
+        : "";
+      codeBadge = `<a href="/codes/${e.code}" class="font-mono text-xs px-1.5 py-0.5 rounded ${colorClasses}">${escapeHtml(e.code)}</a>${claudeIcon}`;
+    } else if (r.claude_status === "pending" || r.claude_status === "processing") {
+      codeBadge = `<span class="text-xs text-purple-600 italic">${lang === "fr" ? "🔍 Claude en cours…" : "🔍 Claude bezig…"}</span>`;
+    } else if (r.claude_status === "error") {
+      codeBadge = `<span class="text-xs text-red-600" title="${escapeHtml(r.claude_error ?? "")}">${lang === "fr" ? "Erreur Claude" : "Claude-fout"}</span>`;
+    } else if (r.claude_status === "skipped") {
+      codeBadge = `<span class="text-xs text-slate-400" title="${escapeHtml(r.claude_error ?? "")}">${lang === "fr" ? "à classer" : "te classificeren"}</span>`;
+    } else {
+      codeBadge = `<span class="text-xs text-slate-400">${lang === "fr" ? "à classer" : "te classificeren"}</span>`;
+    }
+
+    let materialCellExtra = materialCell(r.material, lang);
+    if (r.claude_material_confirmed === 0 && r.claude_material_note) {
+      materialCellExtra += `<div class="text-[10px] text-red-600 mt-0.5" title="${escapeHtml(r.claude_material_note)}">⚠ ${escapeHtml(r.claude_material_note.slice(0, 60))}${r.claude_material_note.length > 60 ? "…" : ""}</div>`;
+    } else if (r.claude_material_confirmed === 1) {
+      materialCellExtra += `<div class="text-[10px] text-green-600 mt-0.5">✓ ${lang === "fr" ? "confirmé photo" : "bevestigd door foto"}</div>`;
+    }
+
+    const invoerPct = e.fromClaude ? r.claude_invoer_pct : r.suggested_invoer_pct;
+
     return `
       <tr class="border-b border-slate-100">
         <td class="py-2 px-2">${photo}</td>
         <td class="py-2 px-2 text-sm">${escapeHtml(r.english_description ?? "")}<div class="text-xs text-slate-500">${escapeHtml(r.chinese_description ?? "")}</div></td>
         <td class="py-2 px-2 text-xs font-mono">${escapeHtml(r.ean ?? "—")}</td>
-        <td class="py-2 px-2 text-xs">${materialCell(r.material, lang)}</td>
+        <td class="py-2 px-2 text-xs">${materialCellExtra}</td>
         <td class="py-2 px-2 text-xs font-mono ${divergent ? "text-red-600 font-bold" : ""}">${escapeHtml(r.hs_china ?? "—")}</td>
         <td class="py-2 px-2">${codeBadge}</td>
-        <td class="py-2 px-2 text-xs text-right">${r.suggested_invoer_pct != null ? (r.suggested_invoer_pct * 100).toFixed(1) + "%" : ""}</td>
-        <td class="py-2 px-2 text-xs text-slate-500 max-w-xs">${escapeHtml(r.suggestion_note ?? "")}</td>
+        <td class="py-2 px-2 text-xs text-right">${invoerPct != null ? (invoerPct * 100).toFixed(1) + "%" : ""}</td>
+        <td class="py-2 px-2 text-xs text-slate-500 max-w-xs">${escapeHtml(e.note)}</td>
       </tr>`;
   }).join("");
 
+  const refreshMeta = claudeActive ? `<meta http-equiv="refresh" content="5">` : "";
+
+  const claudeProgressBlock = claudeTotal > 0
+    ? `
+      <div class="mb-6 bg-purple-50 border border-purple-200 rounded p-3">
+        <div class="flex items-center justify-between text-sm">
+          <div>
+            <span class="font-medium text-purple-900">🔍 Claude vision</span>
+            <span class="text-purple-700"> — ${claudeProcessed}/${claudeTotal} ${lang === "fr" ? "produits analysés" : "producten geanalyseerd"}${claudeErrors > 0 ? ` · ${claudeErrors} ${lang === "fr" ? "erreur(s)" : "fout(en)"}` : ""}</span>
+          </div>
+          <span class="text-xs ${claudeActive ? "text-purple-600 animate-pulse" : "text-green-700"}">${
+            claudeActive
+              ? (lang === "fr" ? "en cours (refresh auto 5s)…" : "bezig (auto-refresh 5s)…")
+              : (lang === "fr" ? "terminé" : "voltooid")
+          }</span>
+        </div>
+        <div class="mt-2 w-full bg-purple-100 rounded-full h-2 overflow-hidden">
+          <div class="bg-purple-600 h-2 transition-all" style="width: ${claudePct}%"></div>
+        </div>
+      </div>
+    `
+    : "";
+
+  const promotedImportId = getPromotedImportId(upload.id);
+  const rowsWithoutCode = eff.filter((e) => !e.code).length;
+  const claudeStillRunning = claudeActive;
+  const canPromote = !promotedImportId && !claudeStillRunning;
+  const promotionBlock = promotedImportId
+    ? `
+      <div class="mb-4 bg-green-50 border border-green-200 rounded p-3 text-sm">
+        ${lang === "fr"
+          ? `Cet upload a été promu en import catalogue → <a href="/imports/${promotedImportId}" class="text-green-800 font-medium underline">voir l'import #${promotedImportId}</a>. Tu peux maintenant y attacher le PDF douanier quand il arrive.`
+          : `Deze upload is gepromoveerd tot catalogus-import → <a href="/imports/${promotedImportId}" class="text-green-800 font-medium underline">bekijk import #${promotedImportId}</a>.`}
+      </div>
+    `
+    : canPromote
+      ? `
+        <div class="mb-4 bg-blue-50 border border-blue-200 rounded p-3 text-sm flex items-center justify-between gap-3">
+          <div>
+            ${lang === "fr"
+              ? `Quand tu es satisfait des codes proposés, promeus cet upload en import catalogue. ${rowsWithoutCode > 0 ? `<strong>${rowsWithoutCode} ligne(s) restent sans code</strong> et seront marquées « à classer » dans l'import.` : ""}`
+              : `Promoveer deze upload tot catalogus-import wanneer tevreden. ${rowsWithoutCode > 0 ? `<strong>${rowsWithoutCode} regel(s) zonder code</strong> blijven als 'te classificeren'.` : ""}`}
+          </div>
+          <form action="/uploads/${upload.id}/promote" method="POST">
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 whitespace-nowrap">
+              ${lang === "fr" ? "Promouvoir en import →" : "Promoveren tot import →"}
+            </button>
+          </form>
+        </div>
+      `
+      : claudeStillRunning
+        ? `<div class="mb-4 bg-slate-50 border border-slate-200 rounded p-3 text-sm text-slate-600">${lang === "fr" ? "La promotion en import sera possible une fois Claude vision terminé." : "Promotie tot import is mogelijk zodra Claude vision klaar is."}</div>`
+        : "";
+
   const body = `
+    ${refreshMeta}
     <div class="mb-4 flex items-center gap-3">
       <a href="/uploads" class="text-blue-600 text-sm hover:underline">${lang === "fr" ? "← Imports" : "← Imports"}</a>
       <h1 class="text-2xl font-bold">${escapeHtml(upload.original_name)}</h1>
@@ -120,6 +232,8 @@ export function renderUploadDetail(upload: UploadSummary, rows: UploadRow[], lan
         ${lang === "fr" ? "⬇ Télécharger Excel enrichi" : "⬇ Verrijkte Excel downloaden"}
       </a>
     </div>
+    ${promotionBlock}
+    ${claudeProgressBlock}
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       <div class="bg-white border border-slate-200 rounded p-3">
         <div class="text-xs uppercase text-slate-500">${lang === "fr" ? "Total" : "Totaal"}</div>

@@ -42,6 +42,9 @@ import {
   clearAuthCookie,
 } from "./web/auth.js";
 import { seedDb, seedPhotos, adminStatus, flattenPhotos, fixPhotoPaths, rematchCustoms } from "./web/admin.js";
+import { resumePendingClaudeWork } from "./web/claude-worker.js";
+import { promoteUploadToImport } from "./web/promote.js";
+import { attachCustomsPdf } from "./web/attach-pdf.js";
 import { config } from "./config.js";
 
 const app = express();
@@ -73,6 +76,23 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     if (file.originalname.toLowerCase().endsWith(".xlsx")) cb(null, true);
     else cb(new Error("Seuls les fichiers .xlsx sont acceptés"));
+  },
+});
+
+const pdfUploadStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, config.uploadsDir),
+  filename: (_req, file, cb) => {
+    const ts = Date.now();
+    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+    cb(null, `pdf-${ts}-${safe}`);
+  },
+});
+const pdfUpload = multer({
+  storage: pdfUploadStorage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.originalname.toLowerCase().endsWith(".pdf")) cb(null, true);
+    else cb(new Error("Seuls les fichiers .pdf sont acceptés"));
   },
 });
 
@@ -256,6 +276,32 @@ app.post("/admin/flatten-photos", flattenPhotos);
 app.post("/admin/fix-photo-paths", fixPhotoPaths);
 app.post("/admin/rematch-customs", rematchCustoms);
 
+app.post("/imports/:id/attach-pdf", pdfUpload.single("pdf"), async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    if (!req.file) {
+      res.status(400).send("Aucun fichier PDF reçu");
+      return;
+    }
+    await attachCustomsPdf(id, req.file.path);
+    res.redirect(`/imports/${id}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).send(`Erreur d'attache PDF : ${msg}`);
+  }
+});
+
+app.post("/uploads/:id/promote", (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const result = promoteUploadToImport(id);
+    res.redirect(`/imports/${result.importId}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).send(`Erreur de promotion : ${msg}`);
+  }
+});
+
 app.get("/uploads/:id/export", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -273,4 +319,8 @@ app.listen(config.port, () => {
   if (!config.appPassword) {
     console.warn("⚠ APP_PASSWORD non défini — l'app est en accès libre (mode dev)");
   }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn("⚠ ANTHROPIC_API_KEY non définie — Claude vision sera désactivé");
+  }
+  resumePendingClaudeWork();
 });

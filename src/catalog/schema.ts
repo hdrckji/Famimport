@@ -83,6 +83,15 @@ export function initSchema(db: Database.Database): void {
     db.exec("ALTER TABLE products ADD COLUMN tarabel_source TEXT");
   }
 
+  const importsCols = db.prepare("PRAGMA table_info(imports)").all() as Array<{ name: string }>;
+  const importsColNames = new Set(importsCols.map((c) => c.name));
+  if (!importsColNames.has("upload_id")) {
+    db.exec("ALTER TABLE imports ADD COLUMN upload_id INTEGER");
+  }
+  if (!importsColNames.has("phase")) {
+    db.exec("ALTER TABLE imports ADD COLUMN phase TEXT DEFAULT 'historical'");
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS uploads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,4 +131,38 @@ export function initSchema(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_upload_rows_upload ON upload_rows(upload_id);
   `);
+
+  // Migration: add Claude-vision columns to uploads + upload_rows
+  const uploadCols = db.prepare("PRAGMA table_info(uploads)").all() as Array<{ name: string }>;
+  const uploadColNames = new Set(uploadCols.map((c) => c.name));
+  const uploadAlters: Array<[string, string]> = [
+    ["claude_status", "TEXT"],
+    ["claude_total", "INTEGER DEFAULT 0"],
+    ["claude_processed", "INTEGER DEFAULT 0"],
+    ["claude_errors", "INTEGER DEFAULT 0"],
+  ];
+  for (const [name, type] of uploadAlters) {
+    if (!uploadColNames.has(name)) db.exec(`ALTER TABLE uploads ADD COLUMN ${name} ${type}`);
+  }
+
+  const rowCols = db.prepare("PRAGMA table_info(upload_rows)").all() as Array<{ name: string }>;
+  const rowColNames = new Set(rowCols.map((c) => c.name));
+  const rowAlters: Array<[string, string]> = [
+    ["claude_status", "TEXT"],
+    ["claude_code", "TEXT"],
+    ["claude_invoer_pct", "REAL"],
+    ["claude_china_invoer_pct", "REAL"],
+    ["claude_confidence", "TEXT"],
+    ["claude_justification", "TEXT"],
+    ["claude_material_confirmed", "INTEGER"],
+    ["claude_material_note", "TEXT"],
+    ["claude_diverges_from_china", "INTEGER"],
+    ["claude_needs_manual_review", "INTEGER"],
+    ["claude_error", "TEXT"],
+    ["claude_completed_at", "TEXT"],
+  ];
+  for (const [name, type] of rowAlters) {
+    if (!rowColNames.has(name)) db.exec(`ALTER TABLE upload_rows ADD COLUMN ${name} ${type}`);
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_upload_rows_claude_status ON upload_rows(claude_status)");
 }

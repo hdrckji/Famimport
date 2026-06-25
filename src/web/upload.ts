@@ -5,6 +5,7 @@ import { readPackingList } from "../catalog/reader.js";
 import { lookupCatalog } from "./lookup.js";
 import { getDb } from "./db.js";
 import { config } from "../config.js";
+import { enqueueUpload, markRowsForClaude } from "./claude-worker.js";
 
 const UPLOADS_DIR = config.uploadsDir;
 const UPLOAD_PHOTOS_DIR = config.uploadPhotosDir;
@@ -19,6 +20,10 @@ export interface UploadSummary {
   matched_ean: number;
   matched_desc: number;
   no_match: number;
+  claude_status: string | null;
+  claude_total: number | null;
+  claude_processed: number | null;
+  claude_errors: number | null;
 }
 
 export interface UploadRow {
@@ -43,6 +48,18 @@ export interface UploadRow {
   catalog_history: string | null;
   user_decision: string | null;
   user_code: string | null;
+  claude_status: string | null;
+  claude_code: string | null;
+  claude_invoer_pct: number | null;
+  claude_china_invoer_pct: number | null;
+  claude_confidence: string | null;
+  claude_justification: string | null;
+  claude_material_confirmed: number | null;
+  claude_material_note: string | null;
+  claude_diverges_from_china: number | null;
+  claude_needs_manual_review: number | null;
+  claude_error: string | null;
+  claude_completed_at: string | null;
 }
 
 export async function processUpload(storedPath: string, originalName: string): Promise<number> {
@@ -134,6 +151,10 @@ export async function processUpload(storedPath: string, originalName: string): P
     `).run(read.rows.length, matchedEan, matchedDesc, noMatch, uploadId);
   });
   tx();
+
+  // Mark rows without a catalog match as pending Claude vision, then kick off the worker.
+  markRowsForClaude(uploadId);
+  setImmediate(() => enqueueUpload(uploadId));
 
   return uploadId;
 }
