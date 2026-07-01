@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import path from "node:path";
 import { getUpload, getUploadRows } from "./upload.js";
+import { pickDataSheet } from "../catalog/reader.js";
 
 const FILL_HIGH: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD5E8D4" } };
 const FILL_MEDIUM: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
@@ -15,25 +16,21 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
   await sourceWb.xlsx.readFile(upload.stored_path);
 
   const rows = getUploadRows(uploadId);
-  const sheet =
-    sourceWb.getWorksheet("creatie") ??
-    sourceWb.getWorksheet("bewerkt") ??
-    sourceWb.getWorksheet("BEWERKT");
-  if (!sheet) throw new Error("Onglet de données introuvable");
+  const picked = pickDataSheet(sourceWb);
+  if (!picked) throw new Error("Onglet de données introuvable");
+  const { sheet, headers, headerRow: headerRowIdx } = picked;
+  const headerRow = sheet.getRow(headerRowIdx);
 
-  const headerRow = sheet.getRow(1);
   function findCol(...patterns: RegExp[]): number | null {
-    for (let c = 1; c <= sheet!.columnCount; c++) {
-      const v = headerRow.getCell(c).value;
-      const text = typeof v === "string" ? v.toLowerCase().trim() : "";
-      if (text && patterns.some((p) => p.test(text))) return c;
+    for (const [text, col] of headers) {
+      if (patterns.some((p) => p.test(text))) return col;
     }
     return null;
   }
 
-  const intrastatCol = findCol(/^intrastat.?code$/, /^intrastat$/) ?? 9;
-  const invoerCol = findCol(/^invoer\s*%$/, /^%\s*invoer$/, /^invoer$/) ?? 10;
-  const hsCol = findCol(/^hs\s*code$/) ?? 8;
+  const hsCol = findCol(/^hs\s*code$/, /^goederen.*code/) ?? 8;
+  const intrastatCol = findCol(/^intrastat.?code$/, /^intrastat$/) ?? hsCol;
+  const invoerCol = findCol(/^invoer\s*%$/, /^%\s*invoer$/, /^invoer$/);
 
   const auditStart = sheet.columnCount + 1;
   const auditCols = {
@@ -99,7 +96,7 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
 
     if (finalCode) {
       target.getCell(intrastatCol).value = finalCode;
-      if (finalInvoer != null) {
+      if (finalInvoer != null && invoerCol != null) {
         target.getCell(invoerCol).value = finalInvoer;
         target.getCell(invoerCol).numFmt = "0.00%";
       }

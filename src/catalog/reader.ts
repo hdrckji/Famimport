@@ -99,7 +99,7 @@ function buildHeaderMap(headers: Map<string, number>): Map<keyof typeof HEADER_P
 
 const HEADER_SCAN_ROWS = 20;
 
-function pickDataSheet(workbook: ExcelJS.Workbook): {
+export function pickDataSheet(workbook: ExcelJS.Workbook): {
   sheet: ExcelJS.Worksheet;
   headers: Map<string, number>;
   variant: string;
