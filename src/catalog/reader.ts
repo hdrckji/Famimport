@@ -25,6 +25,7 @@ export interface ReadResult {
   workbook: ExcelJS.Workbook;
   sheetName: string;
   schemaVariant: string;
+  headerRow: number;
   rows: CatalogRow[];
 }
 
@@ -64,7 +65,7 @@ function normalizeCode(s: string): string {
 }
 
 const HEADER_PATTERNS: Record<keyof Omit<CatalogRow, "rowIndex" | "imageBuffer" | "imageExt">, RegExp[]> = {
-  ean: [/^eanbarcode$/, /^ean.?barcode$/, /^ean$/],
+  ean: [/^eanbarcode$/, /^ean.?barcode$/, /^ean$/, /^bar\s*code$/],
   leverancier: [/^leverancier$/],
   bestelnummer: [/^bestel.?nummer$/, /^bestelummer$/],
   chineseDescription: [/^chinese.*description$/],
@@ -96,10 +97,13 @@ function buildHeaderMap(headers: Map<string, number>): Map<keyof typeof HEADER_P
   return map;
 }
 
+const HEADER_SCAN_ROWS = 20;
+
 function pickDataSheet(workbook: ExcelJS.Workbook): {
   sheet: ExcelJS.Worksheet;
   headers: Map<string, number>;
   variant: string;
+  headerRow: number;
 } | null {
   const candidates = ["bewerkt", "BEWERKT", "creatie", "Creatie"];
   const considered: ExcelJS.Worksheet[] = [];
@@ -112,21 +116,24 @@ function pickDataSheet(workbook: ExcelJS.Workbook): {
   }
 
   for (const ws of considered) {
-    const headers = new Map<string, number>();
-    const headerRow = ws.getRow(1);
-    for (let c = 1; c <= ws.columnCount; c++) {
-      const h = cellToText(headerRow.getCell(c).value).toLowerCase().trim();
-      if (h) headers.set(h, c);
-    }
-    const hasHS = [...headers.keys()].some((k) =>
-      /^hs\s*code$|^intrastat|^goederen.*code/.test(k),
-    );
-    const hasDesc = [...headers.keys()].some((k) =>
-      /chinese|english/.test(k),
-    );
-    if (hasHS && hasDesc) {
-      const variant = ws.name.toLowerCase();
-      return { sheet: ws, headers, variant };
+    const maxScan = Math.min(HEADER_SCAN_ROWS, ws.rowCount);
+    for (let r = 1; r <= maxScan; r++) {
+      const headers = new Map<string, number>();
+      const row = ws.getRow(r);
+      for (let c = 1; c <= ws.columnCount; c++) {
+        const h = cellToText(row.getCell(c).value).toLowerCase().trim();
+        if (h && !headers.has(h)) headers.set(h, c);
+      }
+      const hasHS = [...headers.keys()].some((k) =>
+        /^hs\s*code$|^intrastat|^goederen.*code/.test(k),
+      );
+      const hasDesc = [...headers.keys()].some((k) =>
+        /chinese|english/.test(k),
+      );
+      if (hasHS && hasDesc) {
+        const variant = ws.name.toLowerCase();
+        return { sheet: ws, headers, variant, headerRow: r };
+      }
     }
   }
   return null;
@@ -159,12 +166,12 @@ export async function readPackingList(path: string): Promise<ReadResult | null> 
   await wb.xlsx.readFile(path);
   const picked = pickDataSheet(wb);
   if (!picked) return null;
-  const { sheet, headers, variant } = picked;
+  const { sheet, headers, variant, headerRow } = picked;
   const colMap = buildHeaderMap(headers);
   const images = extractImages(wb, sheet);
 
   const rows: CatalogRow[] = [];
-  for (let r = 2; r <= sheet.rowCount; r++) {
+  for (let r = headerRow + 1; r <= sheet.rowCount; r++) {
     const row = sheet.getRow(r);
     const get = (field: keyof typeof HEADER_PATTERNS) => {
       const c = colMap.get(field);
@@ -202,5 +209,5 @@ export async function readPackingList(path: string): Promise<ReadResult | null> 
     });
   }
 
-  return { workbook: wb, sheetName: sheet.name, schemaVariant: variant, rows };
+  return { workbook: wb, sheetName: sheet.name, schemaVariant: variant, headerRow, rows };
 }
