@@ -14,6 +14,7 @@
     "cli": "node --import tsx src/index.ts",
     "ingest": "node --import tsx src/ingest-catalog.ts",
     "ingest-customs": "node --import tsx src/ingest-customs.ts",
+    "ingest-tarbel": "node --import tsx src/ingest-tarbel.ts",
     "stats": "node --import tsx src/catalog-stats.ts",
     "check": "tsc --noEmit"
   },

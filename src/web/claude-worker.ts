@@ -1,9 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { Classifier } from "../claude/classify.js";
-import type { ProductRow } from "../types.js";
+import type { ProductRow, ClassificationResult } from "../types.js";
 import { getDb } from "./db.js";
 import { config } from "../config.js";
+import { checkCode, listCodesUnderPrefix } from "../tarabel/validate.js";
 
 interface PendingRow {
   id: number;
@@ -91,7 +92,34 @@ async function classifyOne(rowId: number): Promise<void> {
   const photo = row.photo_path ? await loadPhotoBuffer(row.photo_path) : null;
 
   try {
-    const result = await cls.classify(toProductRow(row, photo));
+    const productRow = toProductRow(row, photo);
+    let result = await cls.classify(productRow);
+
+    // Validation contre la nomenclature officielle TARBEL. Si le code proposé
+    // n'existe pas, on relance Claude UNE fois avec la liste fermée des codes
+    // réellement valides sous la même position (6 puis 4 chiffres).
+    let check = checkCode(db, result.tarabelCode);
+    if (check.status === "invalid") {
+      let candidates = listCodesUnderPrefix(db, result.tarabelCode.slice(0, 6));
+      if (candidates.length === 0) candidates = listCodesUnderPrefix(db, result.tarabelCode.slice(0, 4));
+      const retry = await cls.classify(productRow, {
+        invalidCode: result.tarabelCode,
+        candidates,
+      });
+      const retryCheck = checkCode(db, retry.tarabelCode);
+      result = retry;
+      check = retryCheck;
+    }
+    if (check.status === "invalid") {
+      // Toujours introuvable après retry : jamais exporté tel quel, revue manuelle forcée
+      result = {
+        ...result,
+        confidence: "low",
+        needsManualReview: true,
+        justification: `⚠ CODE INTROUVABLE dans la nomenclature TARBEL (${check.reason}). ${result.justification}`,
+      } satisfies ClassificationResult;
+    }
+
     db.prepare(
       `UPDATE upload_rows SET
         claude_status = 'done',

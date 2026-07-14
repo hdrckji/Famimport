@@ -39,9 +39,29 @@ npm start -- --input data/import-fournisseur.xlsx --output output/import-verifie
 
 - `src/excel/reader.ts` — lecture Excel + extraction images
 - `src/excel/writer.ts` — écriture Excel enrichi avec colonnes vérification
-- `src/tarabel/` — chargement de la nomenclature Tarabel de référence
+- `src/tarabel/` — nomenclature officielle TARBEL : ingestion des exports XML + validation des codes
 - `src/claude/classify.ts` — appel Claude avec vision + prompt caching
 - `src/index.ts` — orchestration CLI
+
+## Nomenclature officielle TARBEL
+
+Les codes proposés (Claude vision, historique, saisie manuelle) sont validés contre la
+nomenclature officielle TARBEL chargée en base :
+
+```powershell
+npm run ingest-tarbel -- chemin\vers\exports-xml\   # fichier .xml ou dossier entier
+```
+
+Le format accepté est l'export XML TARBEL/TARIC (`TariffHistoryResponse`), aussi bien
+l'**extraction initiale complète** que les **exports différentiels journaliers** (ingérés
+dans l'ordre chronologique, le dernier état gagne ; les fichiers déjà traités sont sautés,
+`--force` pour ré-ingérer).
+
+⚠ Tant que seuls des différentiels journaliers sont chargés (< 10 000 codes), la validation
+reste **informative**. Une fois l'extraction complète chargée, elle devient **bloquante** :
+un code introuvable dans la nomenclature déclenche un retry de Claude avec la liste fermée
+des codes valides de la position, force la revue manuelle, et n'est jamais écrit dans la
+colonne Intrastat de l'export.
 
 ## Avertissement
 

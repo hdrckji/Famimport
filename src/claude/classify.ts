@@ -30,7 +30,14 @@ Format de sortie : UNIQUEMENT un objet JSON valide, sans texte autour, conforme 
   "needsManualReview": boolean (true si confidence=low OU divergence majeure de famille)
 }`;
 
-function buildUserContent(row: ProductRow): Anthropic.ContentBlockParam[] {
+export interface RetryFeedback {
+  /** Code proposé au tour précédent, absent de la nomenclature officielle */
+  invalidCode: string;
+  /** Codes réellement valides sous la même position (peut être vide) */
+  candidates: Array<{ code: string; descriptionFr: string | null; descriptionEn: string | null }>;
+}
+
+function buildUserContent(row: ProductRow, feedback?: RetryFeedback): Anthropic.ContentBlockParam[] {
   const blocks: Anthropic.ContentBlockParam[] = [];
 
   if (row.imageBuffer && row.imageBuffer.length > 0) {
@@ -58,8 +65,26 @@ function buildUserContent(row: ProductRow): Anthropic.ContentBlockParam[] {
     `- Prix unitaire USD : ${row.priceUSD ?? "(inconnu)"}`,
     `- Quantité : ${row.quantity ?? "(inconnu)"}`,
     "",
-    "Réponds avec UNIQUEMENT le JSON, rien d'autre.",
   ];
+
+  if (feedback) {
+    lines.push(
+      `ATTENTION : le code ${feedback.invalidCode} que tu as proposé N'EXISTE PAS dans la nomenclature officielle TARBEL en vigueur.`,
+    );
+    if (feedback.candidates.length > 0) {
+      lines.push(
+        "Voici les codes réellement valides sous cette position — tu DOIS choisir ton code dans cette liste (ou une autre position si aucun ne convient) :",
+      );
+      for (const c of feedback.candidates) {
+        lines.push(`  - ${c.code} : ${c.descriptionFr ?? c.descriptionEn ?? ""}`);
+      }
+    } else {
+      lines.push("Propose une autre position de la nomenclature, en vérifiant soigneusement les subdivisions.");
+    }
+    lines.push("");
+  }
+
+  lines.push("Réponds avec UNIQUEMENT le JSON, rien d'autre.");
   blocks.push({ type: "text", text: lines.join("\n") });
   return blocks;
 }
@@ -74,6 +99,9 @@ function parseClassification(text: string): ClassificationResult {
 
   const tarabelCode = String(obj.tarabelCode ?? "").replace(/\D/g, "");
   if (tarabelCode.length === 0) throw new Error("tarabelCode manquant");
+  if (tarabelCode.length !== 10) {
+    throw new Error(`tarabelCode invalide : ${tarabelCode} (${tarabelCode.length} chiffres au lieu de 10)`);
+  }
 
   const parseRate = (v: unknown): number | null => {
     if (v == null) return null;
@@ -101,7 +129,7 @@ export class Classifier {
     this.client = new Anthropic({ apiKey });
   }
 
-  async classify(row: ProductRow): Promise<ClassificationResult> {
+  async classify(row: ProductRow, feedback?: RetryFeedback): Promise<ClassificationResult> {
     const response = await this.client.messages.create({
       model: MODEL,
       max_tokens: 600,
@@ -115,7 +143,7 @@ export class Classifier {
       messages: [
         {
           role: "user",
-          content: buildUserContent(row),
+          content: buildUserContent(row, feedback),
         },
       ],
     });

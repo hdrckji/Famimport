@@ -132,6 +132,31 @@ export function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_upload_rows_upload ON upload_rows(upload_id);
   `);
 
+  // Nomenclature officielle TARBEL/TARIC (chargée depuis les exports XML)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS nomenclature (
+      code TEXT NOT NULL,
+      suffix TEXT NOT NULL DEFAULT '80',
+      sid INTEGER,
+      description_fr TEXT,
+      description_nl TEXT,
+      description_en TEXT,
+      validity_start TEXT,
+      validity_end TEXT,
+      deleted INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT,
+      PRIMARY KEY (code, suffix)
+    );
+
+    CREATE TABLE IF NOT EXISTS nomenclature_files (
+      file_name TEXT PRIMARY KEY,
+      ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+      blocks INTEGER DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_nomenclature_code ON nomenclature(code);
+  `);
+
   // Migration: add Claude-vision columns to uploads + upload_rows
   const uploadCols = db.prepare("PRAGMA table_info(uploads)").all() as Array<{ name: string }>;
   const uploadColNames = new Set(uploadCols.map((c) => c.name));

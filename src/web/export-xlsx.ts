@@ -2,6 +2,8 @@ import ExcelJS from "exceljs";
 import path from "node:path";
 import { getUpload, getUploadRows } from "./upload.js";
 import { pickDataSheet } from "../catalog/reader.js";
+import { getDb } from "./db.js";
+import { checkCode } from "../tarabel/validate.js";
 
 const FILL_HIGH: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD5E8D4" } };
 const FILL_MEDIUM: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
@@ -92,14 +94,22 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
       : r.claude_status === "done"
         ? r.claude_justification ?? ""
         : r.claude_error ?? r.suggestion_note ?? "";
-    const decision = r.user_decision ?? (finalCode ? (fromCatalog ? "auto-catalogue" : "auto-claude") : "à compléter");
+    let decision = r.user_decision ?? (finalCode ? (fromCatalog ? "auto-catalogue" : "auto-claude") : "à compléter");
 
-    if (finalCode) {
+    // Garde-fou final : un code absent de la nomenclature officielle TARBEL
+    // n'est JAMAIS écrit dans la colonne Intrastat du fichier exporté.
+    const codeCheck = finalCode ? checkCode(getDb(), finalCode) : null;
+    const codeInvalid = codeCheck?.status === "invalid";
+
+    if (finalCode && !codeInvalid) {
       target.getCell(intrastatCol).value = finalCode;
       if (finalInvoer != null && invoerCol != null) {
         target.getCell(invoerCol).value = finalInvoer;
         target.getCell(invoerCol).numFmt = "0.00%";
       }
+    }
+    if (codeInvalid) {
+      decision = "CODE INEXISTANT — à corriger";
     }
 
     // Red highlight on the China HS code if divergent
@@ -113,17 +123,23 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
       };
     }
 
-    target.getCell(auditCols.finalCode).value = finalCode;
+    target.getCell(auditCols.finalCode).value = codeInvalid
+      ? `${finalCode} ❌ inexistant`
+      : finalCode;
     target.getCell(auditCols.source).value = finalSource;
     target.getCell(auditCols.confidence).value = finalConfidence;
     target.getCell(auditCols.decision).value = decision;
     target.getCell(auditCols.materialOk).value =
       r.claude_material_confirmed == null ? "" : r.claude_material_confirmed ? "OK" : "DIVERGENT";
     target.getCell(auditCols.materialNote).value = r.claude_material_note ?? "";
-    target.getCell(auditCols.note).value = finalNote;
+    target.getCell(auditCols.note).value =
+      codeInvalid && codeCheck?.status === "invalid"
+        ? `⚠ ${codeCheck.reason}. ${finalNote}`.trim()
+        : finalNote;
 
-    const fill =
-      finalConfidence === "high"
+    const fill = codeInvalid
+      ? FILL_LOW
+      : finalConfidence === "high"
         ? FILL_HIGH
         : finalConfidence === "medium"
           ? FILL_MEDIUM
@@ -132,6 +148,10 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
             : FILL_NONE;
     target.getCell(auditCols.confidence).fill = fill;
     target.getCell(intrastatCol).fill = fill;
+    if (codeInvalid) {
+      target.getCell(auditCols.finalCode).fill = FILL_LOW;
+      target.getCell(auditCols.decision).fill = FILL_LOW;
+    }
     if (r.claude_material_confirmed === 0) {
       target.getCell(auditCols.materialOk).fill = FILL_LOW;
     } else if (r.claude_material_confirmed === 1) {
