@@ -34,7 +34,10 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
   const intrastatCol = findCol(/^intrastat.?code$/, /^intrastat$/) ?? hsCol;
   const invoerCol = findCol(/^invoer\s*%$/, /^%\s*invoer$/, /^invoer$/);
 
-  const auditStart = sheet.columnCount + 1;
+  // Si le fichier est lui-même un export vérifié (re-contrôle), on réécrit le
+  // bloc d'audit existant au lieu d'en ajouter un deuxième à côté.
+  const existingAudit = [...headers].find(([t]) => t === "code final")?.[1];
+  const auditStart = existingAudit ?? sheet.columnCount + 1;
   const auditCols = {
     finalCode: auditStart,
     source: auditStart + 1,
