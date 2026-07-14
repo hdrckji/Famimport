@@ -6,6 +6,7 @@ import { lookupCatalog } from "./lookup.js";
 import { getDb } from "./db.js";
 import { config } from "../config.js";
 import { enqueueUpload, markRowsForClaude } from "./claude-worker.js";
+import { checkCode, isNomenclatureAuthoritative } from "../tarabel/validate.js";
 
 const UPLOADS_DIR = config.uploadsDir;
 const UPLOAD_PHOTOS_DIR = config.uploadPhotosDir;
@@ -151,6 +152,28 @@ export async function processUpload(storedPath: string, originalName: string): P
     `).run(read.rows.length, matchedEan, matchedDesc, noMatch, uploadId);
   });
   tx();
+
+  // Une suggestion issue de l'historique peut pointer vers un code qui n'existe
+  // plus dans la nomenclature actuelle (subdivisé/supprimé depuis). Ces lignes
+  // sont signalées et envoyées elles aussi en vision Claude.
+  if (isNomenclatureAuthoritative(db)) {
+    const suggested = db
+      .prepare(
+        `SELECT id, suggested_code FROM upload_rows WHERE upload_id = ? AND suggested_code IS NOT NULL AND suggested_code != ''`,
+      )
+      .all(uploadId) as Array<{ id: number; suggested_code: string }>;
+    const flag = db.prepare(`
+      UPDATE upload_rows
+      SET claude_status = 'pending',
+          suggestion_confidence = 'low',
+          suggestion_note = suggestion_note || ' ⚠ Ce code n''est plus déclarable dans la nomenclature actuelle (' || ? || ').'
+      WHERE id = ?
+    `);
+    for (const row of suggested) {
+      const check = checkCode(db, row.suggested_code);
+      if (check.status === "invalid") flag.run(check.reason, row.id);
+    }
+  }
 
   // Mark rows without a catalog match as pending Claude vision, then kick off the worker.
   markRowsForClaude(uploadId);

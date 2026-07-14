@@ -157,6 +157,14 @@ export function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_nomenclature_code ON nomenclature(code);
   `);
 
+  // Migration : colonnes issues des extractions complètes CIRCABC (xlsx)
+  const nomCols = db.prepare("PRAGMA table_info(nomenclature)").all() as Array<{ name: string }>;
+  const nomColNames = new Set(nomCols.map((c) => c.name));
+  if (!nomColNames.has("is_leaf")) db.exec("ALTER TABLE nomenclature ADD COLUMN is_leaf INTEGER");
+  if (!nomColNames.has("third_country_duty")) {
+    db.exec("ALTER TABLE nomenclature ADD COLUMN third_country_duty REAL");
+  }
+
   // Migration: add Claude-vision columns to uploads + upload_rows
   const uploadCols = db.prepare("PRAGMA table_info(uploads)").all() as Array<{ name: string }>;
   const uploadColNames = new Set(uploadCols.map((c) => c.name));

@@ -27,7 +27,13 @@ export function isNomenclatureAuthoritative(db: Database.Database): boolean {
 }
 
 export type CodeCheck =
-  | { status: "valid"; descriptionFr: string | null; descriptionNl: string | null }
+  | {
+      status: "valid";
+      descriptionFr: string | null;
+      descriptionNl: string | null;
+      /** Droit pays tiers officiel (ERGA OMNES) en %, si connu */
+      thirdCountryDuty: number | null;
+    }
   | { status: "invalid"; reason: string }
   | { status: "unknown"; reason: string };
 
@@ -38,18 +44,28 @@ export type CodeCheck =
  * - "unknown" : nomenclature absente/partielle → impossible de trancher
  */
 export function checkCode(db: Database.Database, code: string): CodeCheck {
-  const clean = code.replace(/\D/g, "");
+  let clean = code.replace(/\D/g, "");
+  // Zéro de tête perdu par Excel (cellule numérique) : un code à 9 chiffres
+  // ne peut être qu'un code des chapitres 01-09 → on le restaure.
+  if (clean.length === 9) clean = "0" + clean;
   if (clean.length !== 10) {
     return { status: "invalid", reason: `Code à ${clean.length} chiffres (10 attendus)` };
   }
 
   const row = db
     .prepare(
-      `SELECT description_fr, description_nl, deleted, validity_end
+      `SELECT description_fr, description_nl, deleted, validity_end, is_leaf, third_country_duty
        FROM nomenclature WHERE code = ? AND suffix = '80'`,
     )
     .get(clean) as
-    | { description_fr: string | null; description_nl: string | null; deleted: number; validity_end: string | null }
+    | {
+        description_fr: string | null;
+        description_nl: string | null;
+        deleted: number;
+        validity_end: string | null;
+        is_leaf: number | null;
+        third_country_duty: number | null;
+      }
     | undefined;
 
   if (row) {
@@ -57,7 +73,17 @@ export function checkCode(db: Database.Database, code: string): CodeCheck {
     if (row.validity_end && row.validity_end < new Date().toISOString()) {
       return { status: "invalid", reason: `Code expiré depuis le ${row.validity_end.slice(0, 10)}` };
     }
-    return { status: "valid", descriptionFr: row.description_fr, descriptionNl: row.description_nl };
+    // is_leaf = 0 : position de regroupement, non déclarable en douane.
+    // is_leaf NULL : code créé par un delta XML (info leaf inconnue) → accepté.
+    if (row.is_leaf === 0) {
+      return { status: "invalid", reason: "Position de regroupement, non déclarable (IS_LEAF=0)" };
+    }
+    return {
+      status: "valid",
+      descriptionFr: row.description_fr,
+      descriptionNl: row.description_nl,
+      thirdCountryDuty: row.third_country_duty,
+    };
   }
 
   if (!isNomenclatureAuthoritative(db)) {
@@ -91,6 +117,8 @@ export function listCodesUnderPrefix(
       `SELECT code, description_fr AS descriptionFr, description_en AS descriptionEn
        FROM nomenclature
        WHERE code LIKE ? AND suffix = '80' AND deleted = 0
+         AND (is_leaf IS NULL OR is_leaf = 1)
+         AND (validity_end IS NULL OR validity_end >= datetime('now'))
        ORDER BY code LIMIT ?`,
     )
     .all(`${clean}%`, limit) as CandidateCode[];

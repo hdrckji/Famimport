@@ -63,13 +63,13 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
     const target = sheet.getRow(r.row_index);
 
     // Catalog suggestion wins. If absent and Claude has produced something, fall back to Claude.
-    const fromCatalog = r.user_code != null || (r.suggested_code != null && r.suggested_code !== "");
-    const finalCode =
+    let fromCatalog = r.user_code != null || (r.suggested_code != null && r.suggested_code !== "");
+    let finalCode =
       r.user_code ??
       r.suggested_code ??
       (r.claude_status === "done" ? r.claude_code : null) ??
       null;
-    const finalInvoer =
+    let finalInvoer =
       r.user_code != null
         ? r.suggested_invoer_pct
         : r.suggested_code != null
@@ -77,19 +77,19 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
           : r.claude_status === "done"
             ? r.claude_invoer_pct
             : null;
-    const finalSource = r.user_code
+    let finalSource = r.user_code
       ? "manual"
       : r.suggested_code
         ? r.suggestion_source ?? ""
         : r.claude_status === "done"
           ? "claude_vision"
           : r.claude_status ?? "";
-    const finalConfidence = fromCatalog
+    let finalConfidence = fromCatalog
       ? r.suggestion_confidence ?? ""
       : r.claude_status === "done"
         ? r.claude_confidence ?? ""
         : "";
-    const finalNote = fromCatalog
+    let finalNote = fromCatalog
       ? r.suggestion_note ?? ""
       : r.claude_status === "done"
         ? r.claude_justification ?? ""
@@ -98,7 +98,30 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
 
     // Garde-fou final : un code absent de la nomenclature officielle TARBEL
     // n'est JAMAIS écrit dans la colonne Intrastat du fichier exporté.
-    const codeCheck = finalCode ? checkCode(getDb(), finalCode) : null;
+    let codeCheck = finalCode ? checkCode(getDb(), finalCode) : null;
+
+    // Suggestion catalogue périmée (nomenclature qui a évolué) : si Claude a
+    // proposé un code encore valide, on bascule dessus plutôt que de bloquer.
+    if (
+      codeCheck?.status === "invalid" &&
+      r.user_code == null &&
+      r.claude_status === "done" &&
+      r.claude_code &&
+      r.claude_code !== finalCode
+    ) {
+      const claudeCheck = checkCode(getDb(), r.claude_code);
+      if (claudeCheck.status !== "invalid") {
+        finalNote = `Code catalogue ${finalCode} plus déclarable → remplacé par Claude. ${r.claude_justification ?? ""}`.trim();
+        finalCode = r.claude_code;
+        finalInvoer = r.claude_invoer_pct;
+        finalSource = "claude_vision";
+        finalConfidence = r.claude_confidence ?? "";
+        decision = "auto-claude (catalogue périmé)";
+        fromCatalog = false;
+        codeCheck = claudeCheck;
+      }
+    }
+
     const codeInvalid = codeCheck?.status === "invalid";
 
     if (finalCode && !codeInvalid) {

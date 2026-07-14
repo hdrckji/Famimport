@@ -118,6 +118,9 @@ async function classifyOne(rowId: number): Promise<void> {
         needsManualReview: true,
         justification: `⚠ CODE INTROUVABLE dans la nomenclature TARBEL (${check.reason}). ${result.justification}`,
       } satisfies ClassificationResult;
+    } else if (check.status === "valid" && check.thirdCountryDuty != null) {
+      // Le taux officiel (ERGA OMNES) remplace l'estimation de Claude
+      result = { ...result, invoerRateForSuggestedCode: check.thirdCountryDuty };
     }
 
     db.prepare(
@@ -232,18 +235,23 @@ export function enqueueUpload(uploadId: number): void {
  */
 export function markRowsForClaude(uploadId: number): void {
   const db = getDb();
-  const res = db
-    .prepare(
-      `UPDATE upload_rows
-       SET claude_status = 'pending'
-       WHERE upload_id = ?
-         AND (suggestion_source = 'none' OR suggestion_source IS NULL)
-         AND claude_status IS NULL`,
-    )
-    .run(uploadId);
+  db.prepare(
+    `UPDATE upload_rows
+     SET claude_status = 'pending'
+     WHERE upload_id = ?
+       AND (suggestion_source = 'none' OR suggestion_source IS NULL)
+       AND claude_status IS NULL`,
+  ).run(uploadId);
+  // Recompte total : inclut aussi les lignes pré-marquées 'pending' en amont
+  // (ex. suggestion catalogue dont le code n'est plus déclarable).
+  const pending = (
+    db
+      .prepare(`SELECT COUNT(*) AS c FROM upload_rows WHERE upload_id = ? AND claude_status = 'pending'`)
+      .get(uploadId) as { c: number }
+  ).c;
   db.prepare(`UPDATE uploads SET claude_total = ?, claude_status = ? WHERE id = ?`).run(
-    res.changes,
-    res.changes > 0 ? "processing" : "done",
+    pending,
+    pending > 0 ? "processing" : "done",
     uploadId,
   );
 }
