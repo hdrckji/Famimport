@@ -123,6 +123,10 @@ async function classifyOne(rowId: number): Promise<void> {
       result = { ...result, invoerRateForSuggestedCode: check.thirdCountryDuty };
     }
 
+    // Claude et la nomenclature expriment les taux en pourcents (6.5) ;
+    // la base stocke des fractions (0.065), comme les codes du catalogue.
+    const toFraction = (v: number | null): number | null => (v == null ? null : v / 100);
+
     db.prepare(
       `UPDATE upload_rows SET
         claude_status = 'done',
@@ -139,8 +143,8 @@ async function classifyOne(rowId: number): Promise<void> {
        WHERE id = ?`,
     ).run(
       result.tarabelCode,
-      result.invoerRateForSuggestedCode,
-      result.invoerRateForChinaCode,
+      toFraction(result.invoerRateForSuggestedCode),
+      toFraction(result.invoerRateForChinaCode),
       result.confidence,
       result.justification,
       result.materialConfirmed ? 1 : 0,

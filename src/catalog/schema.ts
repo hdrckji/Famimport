@@ -198,4 +198,12 @@ export function initSchema(db: Database.Database): void {
     if (!rowColNames.has(name)) db.exec(`ALTER TABLE upload_rows ADD COLUMN ${name} ${type}`);
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_upload_rows_claude_status ON upload_rows(claude_status)");
+
+  // Normalisation : d'anciens runs ont stocké les taux Claude en pourcents (6.5)
+  // au lieu de fractions (0.065). Un taux > 150% n'existe pas dans nos familles
+  // de produits → toute valeur > 1.5 est un pourcent à convertir.
+  db.exec(`
+    UPDATE upload_rows SET claude_invoer_pct = claude_invoer_pct / 100.0 WHERE claude_invoer_pct > 1.5;
+    UPDATE upload_rows SET claude_china_invoer_pct = claude_china_invoer_pct / 100.0 WHERE claude_china_invoer_pct > 1.5;
+  `);
 }
