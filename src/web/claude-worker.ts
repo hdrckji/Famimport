@@ -96,8 +96,9 @@ async function classifyOne(rowId: number): Promise<void> {
     let result = await cls.classify(productRow);
 
     // Validation contre la nomenclature officielle TARBEL. Si le code proposé
-    // n'existe pas, on relance Claude UNE fois avec la liste fermée des codes
-    // réellement valides sous la même position (6 puis 4 chiffres).
+    // n'existe pas, on relance Claude avec la liste fermée des codes valides
+    // sous la même position (6 puis 4 chiffres) ; s'il répond encore hors
+    // liste, un dernier essai en mode strict l'oblige à choisir dedans.
     let check = checkCode(db, result.tarabelCode);
     if (check.status === "invalid") {
       let candidates = listCodesUnderPrefix(db, result.tarabelCode.slice(0, 6));
@@ -106,9 +107,24 @@ async function classifyOne(rowId: number): Promise<void> {
         invalidCode: result.tarabelCode,
         candidates,
       });
-      const retryCheck = checkCode(db, retry.tarabelCode);
       result = retry;
-      check = retryCheck;
+      check = checkCode(db, retry.tarabelCode);
+
+      if (check.status === "invalid" && candidates.length > 0) {
+        // Le retry a peut-être changé de position : recharge les candidats correspondants
+        let strictCandidates = listCodesUnderPrefix(db, retry.tarabelCode.slice(0, 6));
+        if (strictCandidates.length === 0) strictCandidates = candidates;
+        const strictRetry = await cls.classify(productRow, {
+          invalidCode: retry.tarabelCode,
+          candidates: strictCandidates,
+          strict: true,
+        });
+        const strictCheck = checkCode(db, strictRetry.tarabelCode);
+        if (strictCheck.status !== "invalid") {
+          result = strictRetry;
+          check = strictCheck;
+        }
+      }
     }
     if (check.status === "invalid") {
       // Toujours introuvable après retry : jamais exporté tel quel, revue manuelle forcée

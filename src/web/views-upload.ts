@@ -3,7 +3,7 @@ import { translateMaterial, t, type Lang } from "./i18n.js";
 import type { UploadRow, UploadSummary } from "./upload.js";
 import { getPromotedImportId } from "./promote.js";
 import { getDb } from "./db.js";
-import { checkCode } from "../tarabel/validate.js";
+import { checkCode, listCodesUnderPrefix } from "../tarabel/validate.js";
 
 function materialCell(raw: string | null, lang: Lang): string {
   if (!raw) return "";
@@ -190,7 +190,25 @@ export function renderUploadDetail(upload: UploadSummary, rows: UploadRow[], lan
       const invalidFlag = e.invalidReason
         ? `<div class="text-[10px] text-red-700 mt-0.5" title="${escapeHtml(e.invalidReason)}">⚠ ${lang === "fr" ? "code invalide — à corriger" : "ongeldige code — te corrigeren"}</div>`
         : "";
-      codeBadge = `${replaced}<a href="/codes/${e.code}" class="font-mono text-xs px-1.5 py-0.5 rounded ${colorClasses}">${escapeHtml(e.code)}</a>${claudeIcon}${invalidFlag}`;
+      // Un code invalide sans remplacement : propose les subdivisions valides
+      // de la même position pour que l'utilisateur puisse choisir.
+      let alternatives = "";
+      if (e.invalidReason) {
+        const db = getDb();
+        let cands = listCodesUnderPrefix(db, e.code.slice(0, 8), 6);
+        if (cands.length === 0) cands = listCodesUnderPrefix(db, e.code.slice(0, 6), 6);
+        if (cands.length === 0) cands = listCodesUnderPrefix(db, e.code.slice(0, 4), 6);
+        if (cands.length > 0) {
+          const links = cands
+            .map(
+              (c) =>
+                `<a href="/codes/${c.code}" class="font-mono text-green-700 underline" title="${escapeHtml(c.descriptionFr ?? c.descriptionEn ?? "")}">${c.code}</a>`,
+            )
+            .join(" · ");
+          alternatives = `<div class="text-[10px] text-slate-600 mt-0.5">${lang === "fr" ? "Codes valides ici" : "Geldige codes hier"} : ${links}</div>`;
+        }
+      }
+      codeBadge = `${replaced}<a href="/codes/${e.code}" class="font-mono text-xs px-1.5 py-0.5 rounded ${colorClasses}">${escapeHtml(e.code)}</a>${claudeIcon}${invalidFlag}${alternatives}`;
     } else if (r.claude_status === "pending" || r.claude_status === "processing") {
       codeBadge = `<span class="text-xs text-purple-600 italic">${lang === "fr" ? "🔍 Claude en cours…" : "🔍 Claude bezig…"}</span>`;
     } else if (r.claude_status === "error") {

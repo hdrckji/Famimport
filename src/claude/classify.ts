@@ -35,6 +35,8 @@ export interface RetryFeedback {
   invalidCode: string;
   /** Codes réellement valides sous la même position (peut être vide) */
   candidates: Array<{ code: string; descriptionFr: string | null; descriptionEn: string | null }>;
+  /** Dernier recours : la réponse DOIT être un code de la liste, sans exception */
+  strict?: boolean;
 }
 
 function buildUserContent(row: ProductRow, feedback?: RetryFeedback): Anthropic.ContentBlockParam[] {
@@ -73,7 +75,9 @@ function buildUserContent(row: ProductRow, feedback?: RetryFeedback): Anthropic.
     );
     if (feedback.candidates.length > 0) {
       lines.push(
-        "Voici les codes réellement valides sous cette position — tu DOIS choisir ton code dans cette liste (ou une autre position si aucun ne convient) :",
+        feedback.strict
+          ? "DERNIER ESSAI. Ton champ tarabelCode DOIT être l'un des codes ci-dessous, recopié EXACTEMENT (10 chiffres). Toute autre réponse sera rejetée. Choisis le plus adapté au produit (souvent la subdivision « autres ») :"
+          : "Voici les codes réellement valides sous cette position. Recopie EXACTEMENT l'un de ces codes dans tarabelCode — ne réponds JAMAIS un code hors de cette liste (sauf si tu changes complètement de position) :",
       );
       for (const c of feedback.candidates) {
         lines.push(`  - ${c.code} : ${c.descriptionFr ?? c.descriptionEn ?? ""}`);
