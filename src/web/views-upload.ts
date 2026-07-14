@@ -2,6 +2,8 @@ import { escapeHtml, layout } from "./layout.js";
 import { translateMaterial, t, type Lang } from "./i18n.js";
 import type { UploadRow, UploadSummary } from "./upload.js";
 import { getPromotedImportId } from "./promote.js";
+import { getDb } from "./db.js";
+import { checkCode } from "../tarabel/validate.js";
 
 function materialCell(raw: string | null, lang: Lang): string {
   if (!raw) return "";
@@ -78,26 +80,71 @@ export function renderUploadForm(lang: Lang, error?: string): string {
   return layout(lang === "fr" ? "Nouvel import" : "Nieuwe import", body, "uploads", lang, "/upload");
 }
 
-function effectiveCode(r: UploadRow): { code: string | null; confidence: string | null; source: string; note: string; fromClaude: boolean } {
+interface EffectiveCode {
+  code: string | null;
+  confidence: string | null;
+  source: string;
+  note: string;
+  fromClaude: boolean;
+  /** Ancien code catalogue périmé, remplacé par le code affiché */
+  replacedCode?: string | null;
+  /** Raison pour laquelle le code affiché est invalide (aucun remplacement valide trouvé) */
+  invalidReason?: string | null;
+}
+
+// Même logique de priorité que l'export Excel (export-xlsx.ts) : la page et
+// le fichier téléchargé doivent toujours montrer le même code.
+function effectiveCode(r: UploadRow, lang: Lang): EffectiveCode {
+  const db = getDb();
   if (r.user_code) {
     return { code: r.user_code, confidence: r.suggestion_confidence, source: "manuel", note: r.suggestion_note ?? "", fromClaude: false };
   }
   if (r.suggested_code) {
+    const check = checkCode(db, r.suggested_code);
+    if (check.status !== "invalid") {
+      return {
+        code: r.suggested_code,
+        confidence: r.suggestion_confidence,
+        source: r.suggestion_source ?? "catalogue",
+        note: r.suggestion_note ?? "",
+        fromClaude: false,
+      };
+    }
+    // Suggestion catalogue périmée : bascule sur le code Claude s'il est valide
+    const claudeOk =
+      r.claude_status === "done" && r.claude_code && checkCode(db, r.claude_code).status !== "invalid";
+    if (claudeOk) {
+      const prefix =
+        lang === "fr"
+          ? `Code catalogue ${r.suggested_code} plus déclarable → remplacé par Claude. `
+          : `Cataloguscode ${r.suggested_code} niet meer aangeefbaar → vervangen door Claude. `;
+      return {
+        code: r.claude_code,
+        confidence: r.claude_confidence,
+        source: "claude_vision",
+        note: prefix + (r.claude_justification ?? ""),
+        fromClaude: true,
+        replacedCode: r.suggested_code,
+      };
+    }
     return {
       code: r.suggested_code,
-      confidence: r.suggestion_confidence,
+      confidence: "low",
       source: r.suggestion_source ?? "catalogue",
       note: r.suggestion_note ?? "",
       fromClaude: false,
+      invalidReason: check.reason,
     };
   }
   if (r.claude_status === "done" && r.claude_code) {
+    const check = checkCode(db, r.claude_code);
     return {
       code: r.claude_code,
       confidence: r.claude_confidence,
       source: "claude_vision",
       note: r.claude_justification ?? "",
       fromClaude: true,
+      invalidReason: check.status === "invalid" ? check.reason : null,
     };
   }
   return { code: null, confidence: null, source: r.claude_status ?? "", note: r.claude_error ?? "", fromClaude: false };
@@ -106,7 +153,7 @@ function effectiveCode(r: UploadRow): { code: string | null; confidence: string 
 export function renderUploadDetail(upload: UploadSummary, rows: UploadRow[], lang: Lang): string {
   const tr = t(lang);
   const total = rows.length;
-  const eff = rows.map(effectiveCode);
+  const eff = rows.map((r) => effectiveCode(r, lang));
   const counts = {
     high: eff.filter((e) => e.confidence === "high").length,
     medium: eff.filter((e) => e.confidence === "medium").length,
@@ -129,14 +176,21 @@ export function renderUploadDetail(upload: UploadSummary, rows: UploadRow[], lan
 
     let codeBadge: string;
     if (e.code) {
-      const colorClasses =
-        e.confidence === "high" ? "bg-green-100 text-green-800 hover:bg-green-200"
+      const colorClasses = e.invalidReason
+        ? "bg-red-100 text-red-800 line-through hover:bg-red-200"
+        : e.confidence === "high" ? "bg-green-100 text-green-800 hover:bg-green-200"
         : e.confidence === "medium" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
         : "bg-red-100 text-red-800 hover:bg-red-200";
       const claudeIcon = e.fromClaude
         ? `<span class="inline-block ml-1 px-1 text-[9px] font-bold rounded bg-purple-100 text-purple-800" title="${lang === "fr" ? "Suggéré par Claude vision" : "Voorgesteld door Claude vision"}">IA</span>`
         : "";
-      codeBadge = `<a href="/codes/${e.code}" class="font-mono text-xs px-1.5 py-0.5 rounded ${colorClasses}">${escapeHtml(e.code)}</a>${claudeIcon}`;
+      const replaced = e.replacedCode
+        ? `<span class="font-mono text-[10px] line-through text-slate-400 mr-1" title="${lang === "fr" ? "Ancien code, plus déclarable" : "Oude code, niet meer aangeefbaar"}">${escapeHtml(e.replacedCode)}</span>`
+        : "";
+      const invalidFlag = e.invalidReason
+        ? `<div class="text-[10px] text-red-700 mt-0.5" title="${escapeHtml(e.invalidReason)}">⚠ ${lang === "fr" ? "code invalide — à corriger" : "ongeldige code — te corrigeren"}</div>`
+        : "";
+      codeBadge = `${replaced}<a href="/codes/${e.code}" class="font-mono text-xs px-1.5 py-0.5 rounded ${colorClasses}">${escapeHtml(e.code)}</a>${claudeIcon}${invalidFlag}`;
     } else if (r.claude_status === "pending" || r.claude_status === "processing") {
       codeBadge = `<span class="text-xs text-purple-600 italic">${lang === "fr" ? "🔍 Claude en cours…" : "🔍 Claude bezig…"}</span>`;
     } else if (r.claude_status === "error") {
