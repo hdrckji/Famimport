@@ -32,6 +32,7 @@ import {
   listUploads,
   getUploadRows,
   ensureUploadDirs,
+  deleteUpload,
 } from "./web/upload.js";
 import { buildExportWorkbook } from "./web/export-xlsx.js";
 import type { Lang } from "./web/i18n.js";
@@ -289,6 +290,17 @@ app.post("/imports/:id/attach-pdf", pdfUpload.single("pdf"), async (req, res) =>
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(400).send(`Erreur d'attache PDF : ${msg}`);
+  }
+});
+
+app.post("/uploads/:id/delete", async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    await deleteUpload(id);
+    res.redirect("/uploads");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).send(`Erreur de suppression : ${msg}`);
   }
 });
 

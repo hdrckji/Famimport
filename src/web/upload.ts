@@ -196,6 +196,25 @@ export function getUploadRows(uploadId: number): UploadRow[] {
   `).all(uploadId) as UploadRow[];
 }
 
+/**
+ * Supprime définitivement un upload : lignes en base (cascade), photos
+ * extraites et fichier stocké. Refusé si l'upload a été promu en import.
+ */
+export async function deleteUpload(id: number): Promise<void> {
+  const db = getDb();
+  const u = getUpload(id);
+  if (!u) throw new Error(`Upload ${id} introuvable`);
+  const promoted = db
+    .prepare("SELECT id FROM imports WHERE upload_id = ?")
+    .get(id) as { id: number } | undefined;
+  if (promoted) {
+    throw new Error(`Upload ${id} promu en import #${promoted.id} — suppression refusée`);
+  }
+  db.prepare("DELETE FROM uploads WHERE id = ?").run(id);
+  await fs.rm(path.join(UPLOAD_PHOTOS_DIR, String(id)), { recursive: true, force: true });
+  if (u.stored_path) await fs.rm(u.stored_path, { force: true });
+}
+
 export async function ensureUploadDirs(): Promise<void> {
   await fs.mkdir(UPLOADS_DIR, { recursive: true });
   await fs.mkdir(UPLOAD_PHOTOS_DIR, { recursive: true });

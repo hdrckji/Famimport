@@ -27,6 +27,11 @@ export function renderUploadList(uploads: UploadSummary[], lang: Lang): string {
       <td class="py-2 px-3 text-right text-sm">${total}</td>
       <td class="py-2 px-3"><span class="inline-block px-2 py-0.5 text-xs rounded ${covColor}">${matched}/${total} (${cov}%)</span></td>
       <td class="py-2 px-3 text-sm"><a href="/uploads/${u.id}/export" class="text-blue-600 hover:underline">Excel</a></td>
+      <td class="py-2 px-3 text-sm">
+        <form action="/uploads/${u.id}/delete" method="POST" onsubmit="return confirm('${lang === "fr" ? "Supprimer définitivement cette analyse ?" : "Deze analyse definitief verwijderen?"}')">
+          <button type="submit" class="text-red-500 hover:text-red-700 text-xs" title="${lang === "fr" ? "Supprimer" : "Verwijderen"}">✕</button>
+        </form>
+      </td>
     </tr>`;
   }).join("");
 
@@ -48,6 +53,7 @@ export function renderUploadList(uploads: UploadSummary[], lang: Lang): string {
               <th class="py-2 px-3 text-left">Status</th>
               <th class="py-2 px-3 text-right">${escapeHtml(tr.products)}</th>
               <th class="py-2 px-3 text-left">${lang === "fr" ? "Auto-classifiés" : "Automatisch geclassificeerd"}</th>
+              <th class="py-2 px-3"></th>
               <th class="py-2 px-3"></th>
             </tr>
           </thead>
