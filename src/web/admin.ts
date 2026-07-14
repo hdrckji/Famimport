@@ -110,6 +110,62 @@ export async function rematchCustoms(_req: express.Request, res: express.Respons
   }
 }
 
+/**
+ * Charge/actualise la nomenclature officielle TARBEL en production.
+ * Corps : JSON array des lignes de la table `nomenclature` (envoyé par
+ * `npm run push-nomenclature` depuis le poste local).
+ */
+export async function seedNomenclature(req: express.Request, res: express.Response): Promise<void> {
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    const rows = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Array<{
+      code: string;
+      suffix: string;
+      sid: number | null;
+      description_fr: string | null;
+      description_nl: string | null;
+      description_en: string | null;
+      validity_start: string | null;
+      validity_end: string | null;
+      deleted: number;
+      is_leaf: number | null;
+      third_country_duty: number | null;
+    }>;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      res.status(400).json({ ok: false, error: "corps vide ou invalide" });
+      return;
+    }
+    const { getDb } = await import("./db.js");
+    const db = getDb();
+    const upsert = db.prepare(`
+      INSERT INTO nomenclature (code, suffix, sid, description_fr, description_nl, description_en,
+                                validity_start, validity_end, deleted, is_leaf, third_country_duty, updated_at)
+      VALUES (@code, @suffix, @sid, @description_fr, @description_nl, @description_en,
+              @validity_start, @validity_end, @deleted, @is_leaf, @third_country_duty, datetime('now'))
+      ON CONFLICT(code, suffix) DO UPDATE SET
+        sid = excluded.sid,
+        description_fr = excluded.description_fr,
+        description_nl = excluded.description_nl,
+        description_en = excluded.description_en,
+        validity_start = excluded.validity_start,
+        validity_end = excluded.validity_end,
+        deleted = excluded.deleted,
+        is_leaf = excluded.is_leaf,
+        third_country_duty = excluded.third_country_duty,
+        updated_at = datetime('now')
+    `);
+    const tx = db.transaction(() => {
+      for (const r of rows) upsert.run(r);
+    });
+    tx();
+    const count = (db.prepare("SELECT COUNT(*) AS c FROM nomenclature WHERE deleted = 0").get() as { c: number }).c;
+    res.json({ ok: true, received: rows.length, activeCodes: count });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
 export async function adminStatus(_req: express.Request, res: express.Response): Promise<void> {
   const fs = await import("node:fs/promises");
   const result: Record<string, unknown> = {

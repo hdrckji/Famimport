@@ -41,7 +41,7 @@ import {
   setAuthCookie,
   clearAuthCookie,
 } from "./web/auth.js";
-import { seedDb, seedPhotos, adminStatus, flattenPhotos, fixPhotoPaths, rematchCustoms } from "./web/admin.js";
+import { seedDb, seedPhotos, adminStatus, flattenPhotos, fixPhotoPaths, rematchCustoms, seedNomenclature } from "./web/admin.js";
 import { resumePendingClaudeWork } from "./web/claude-worker.js";
 import { promoteUploadToImport } from "./web/promote.js";
 import { attachCustomsPdf } from "./web/attach-pdf.js";
@@ -275,6 +275,7 @@ app.post("/admin/seed-photos", seedPhotos);
 app.post("/admin/flatten-photos", flattenPhotos);
 app.post("/admin/fix-photo-paths", fixPhotoPaths);
 app.post("/admin/rematch-customs", rematchCustoms);
+app.post("/admin/seed-nomenclature", seedNomenclature);
 
 app.post("/imports/:id/attach-pdf", pdfUpload.single("pdf"), async (req, res) => {
   const id = Number(req.params.id);

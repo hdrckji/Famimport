@@ -15,6 +15,7 @@
     "ingest": "node --import tsx src/ingest-catalog.ts",
     "ingest-customs": "node --import tsx src/ingest-customs.ts",
     "ingest-tarbel": "node --import tsx src/ingest-tarbel.ts",
+    "push-nomenclature": "node --import tsx src/push-nomenclature.ts",
     "stats": "node --import tsx src/catalog-stats.ts",
     "check": "tsc --noEmit"
   },
