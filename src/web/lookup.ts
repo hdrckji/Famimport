@@ -13,6 +13,8 @@ export interface CatalogMatch {
 export interface LookupResult {
   source: SuggestionSource;
   confidence: SuggestionConfidence;
+  /** true = historique validé douane (customs_pdf) ; false = estimation interne jamais validée */
+  validated: boolean;
   code: string | null;
   invoerPct: number | null;
   note: string;
@@ -58,6 +60,7 @@ export function lookupCatalog(db: Database.Database, input: CatalogMatch): Looku
           return {
             source: "ean_unique",
             confidence: "high",
+            validated: true,
             code: topCode,
             invoerPct: codeToInvoer.get(topCode) ?? null,
             note: `EAN validé douane ${totalUses}× dans le catalogue, toujours classé ${topCode}.`,
@@ -70,6 +73,7 @@ export function lookupCatalog(db: Database.Database, input: CatalogMatch): Looku
           return {
             source: "ean_dominant",
             confidence: "medium",
+            validated: true,
             code: topCode,
             invoerPct: codeToInvoer.get(topCode) ?? null,
             note: `EAN validé douane ${totalUses}× (${topCount} fois sous ${topCode}, ${Math.round(dominance * 100)}%) mais ${uniqueCodes.length} codes différents.`,
@@ -80,6 +84,7 @@ export function lookupCatalog(db: Database.Database, input: CatalogMatch): Looku
         return {
           source: "ean_unstable",
           confidence: "low",
+          validated: true,
           code: topCode,
           invoerPct: codeToInvoer.get(topCode) ?? null,
           note: `EAN validé douane ${totalUses}× mais sous ${uniqueCodes.length} codes différents. À revoir.`,
@@ -106,6 +111,7 @@ export function lookupCatalog(db: Database.Database, input: CatalogMatch): Looku
       return {
         source: uniqueCodes.length === 1 ? "ean_unique" : dominance >= 0.75 ? "ean_dominant" : "ean_unstable",
         confidence: "low",
+        validated: false,
         code: topCode,
         invoerPct: codeToInvoer.get(topCode) ?? null,
         note:
@@ -136,6 +142,7 @@ export function lookupCatalog(db: Database.Database, input: CatalogMatch): Looku
         return {
           source: "desc_match",
           confidence: "medium",
+          validated: true,
           code: top.tarabel_validated,
           invoerPct: top.invoer_pct,
           note: `Description chinoise identique validée douane ${total}× sous ${top.tarabel_validated}.`,
@@ -146,6 +153,7 @@ export function lookupCatalog(db: Database.Database, input: CatalogMatch): Looku
       return {
         source: "desc_match",
         confidence: "low",
+        validated: true,
         code: top.tarabel_validated,
         invoerPct: top.invoer_pct,
         note: `Description chinoise validée douane ${total}× sous ${customsRows.length} codes différents.`,
@@ -171,6 +179,7 @@ export function lookupCatalog(db: Database.Database, input: CatalogMatch): Looku
       return {
         source: "desc_match",
         confidence: "low",
+        validated: false,
         code: top.tarabel_validated,
         invoerPct: top.invoer_pct,
         note:
@@ -186,6 +195,7 @@ export function lookupCatalog(db: Database.Database, input: CatalogMatch): Looku
   return {
     source: "none",
     confidence: "none",
+    validated: false,
     code: null,
     invoerPct: null,
     note: "Pas de match dans le catalogue historique.",

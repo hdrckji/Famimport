@@ -45,6 +45,7 @@ export interface UploadRow {
   suggested_invoer_pct: number | null;
   suggestion_source: string | null;
   suggestion_confidence: string | null;
+  suggestion_validated: number | null;
   suggestion_note: string | null;
   catalog_history: string | null;
   user_decision: string | null;
@@ -96,8 +97,8 @@ export async function processUpload(storedPath: string, originalName: string): P
     INSERT INTO upload_rows (
       upload_id, row_index, ean, chinese_description, english_description, nl_description, fr_description,
       hs_china, material, price_usd, quantity, photo_path,
-      suggested_code, suggested_invoer_pct, suggestion_source, suggestion_confidence, suggestion_note, catalog_history
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      suggested_code, suggested_invoer_pct, suggestion_source, suggestion_confidence, suggestion_validated, suggestion_note, catalog_history
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   let matchedEan = 0;
@@ -141,6 +142,7 @@ export async function processUpload(storedPath: string, originalName: string): P
         match.invoerPct,
         match.source,
         match.confidence,
+        match.validated ? 1 : 0,
         match.note,
         match.historyCodes ? JSON.stringify(match.historyCodes) : null,
       );

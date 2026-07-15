@@ -255,11 +255,15 @@ export function enqueueUpload(uploadId: number): void {
  */
 export function markRowsForClaude(uploadId: number): void {
   const db = getDb();
+  // Partent en vision Claude : les lignes sans match catalogue, mais aussi
+  // celles dont le seul match est une estimation interne jamais validée douane
+  // (fausses trop souvent pour être exportées sans contre-vérification).
   db.prepare(
     `UPDATE upload_rows
      SET claude_status = 'pending'
      WHERE upload_id = ?
-       AND (suggestion_source = 'none' OR suggestion_source IS NULL)
+       AND (suggestion_source = 'none' OR suggestion_source IS NULL
+            OR COALESCE(suggestion_validated, 0) = 0)
        AND claude_status IS NULL`,
   ).run(uploadId);
   // Recompte total : inclut aussi les lignes pré-marquées 'pending' en amont

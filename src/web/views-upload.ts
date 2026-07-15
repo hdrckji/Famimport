@@ -100,12 +100,16 @@ interface EffectiveCode {
 
 // Même logique de priorité que l'export Excel (export-xlsx.ts) : la page et
 // le fichier téléchargé doivent toujours montrer le même code.
+// Priorité : manuel > catalogue validé douane > Claude > estimation interne.
 function effectiveCode(r: UploadRow, lang: Lang): EffectiveCode {
   const db = getDb();
   if (r.user_code) {
     return { code: r.user_code, confidence: r.suggestion_confidence, source: "manuel", note: r.suggestion_note ?? "", fromClaude: false };
   }
-  if (r.suggested_code) {
+  const claudeOk =
+    r.claude_status === "done" && r.claude_code && checkCode(db, r.claude_code).status !== "invalid";
+
+  if (r.suggested_code && r.suggestion_validated === 1) {
     const check = checkCode(db, r.suggested_code);
     if (check.status !== "invalid") {
       return {
@@ -117,8 +121,6 @@ function effectiveCode(r: UploadRow, lang: Lang): EffectiveCode {
       };
     }
     // Suggestion catalogue périmée : bascule sur le code Claude s'il est valide
-    const claudeOk =
-      r.claude_status === "done" && r.claude_code && checkCode(db, r.claude_code).status !== "invalid";
     if (claudeOk) {
       const prefix =
         lang === "fr"
@@ -140,6 +142,47 @@ function effectiveCode(r: UploadRow, lang: Lang): EffectiveCode {
       note: r.suggestion_note ?? "",
       fromClaude: false,
       invalidReason: check.reason,
+    };
+  }
+
+  // Pas de match validé douane : Claude prime sur une éventuelle estimation
+  // interne (jamais validée douane, fausse trop souvent pour être exportée telle quelle).
+  if (claudeOk) {
+    let prefix = "";
+    let replacedCode: string | null = null;
+    if (r.suggested_code) {
+      if (r.claude_code === r.suggested_code) {
+        prefix =
+          lang === "fr"
+            ? `Estimation interne ${r.suggested_code} confirmée par Claude. `
+            : `Interne schatting ${r.suggested_code} bevestigd door Claude. `;
+      } else {
+        prefix =
+          lang === "fr"
+            ? `Estimation interne ${r.suggested_code} (jamais validée douane) remplacée par Claude. `
+            : `Interne schatting ${r.suggested_code} (nooit door douane gevalideerd) vervangen door Claude. `;
+        replacedCode = r.suggested_code;
+      }
+    }
+    return {
+      code: r.claude_code,
+      confidence: r.claude_confidence,
+      source: "claude_vision",
+      note: prefix + (r.claude_justification ?? ""),
+      fromClaude: true,
+      replacedCode,
+    };
+  }
+  if (r.suggested_code) {
+    // Repli : estimation interne seule (Claude pas encore passé, en erreur ou invalide)
+    const check = checkCode(db, r.suggested_code);
+    return {
+      code: r.suggested_code,
+      confidence: check.status === "invalid" ? "low" : r.suggestion_confidence,
+      source: r.suggestion_source ?? "catalogue",
+      note: r.suggestion_note ?? "",
+      fromClaude: false,
+      invalidReason: check.status === "invalid" ? check.reason : null,
     };
   }
   if (r.claude_status === "done" && r.claude_code) {

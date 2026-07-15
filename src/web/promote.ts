@@ -49,7 +49,7 @@ export function promoteUploadToImport(uploadId: number): PromotionResult {
     .prepare(
       `SELECT id, row_index, ean, chinese_description, english_description, nl_description, fr_description,
               hs_china, material, price_usd, quantity, photo_path,
-              suggested_code, suggested_invoer_pct, suggestion_source,
+              suggested_code, suggested_invoer_pct, suggestion_source, suggestion_validated,
               user_code,
               claude_status, claude_code, claude_invoer_pct, claude_confidence
        FROM upload_rows WHERE upload_id = ? ORDER BY row_index`,
@@ -70,6 +70,7 @@ export function promoteUploadToImport(uploadId: number): PromotionResult {
       suggested_code: string | null;
       suggested_invoer_pct: number | null;
       suggestion_source: string | null;
+      suggestion_validated: number | null;
       user_code: string | null;
       claude_status: string | null;
       claude_code: string | null;
@@ -111,11 +112,14 @@ export function promoteUploadToImport(uploadId: number): PromotionResult {
       let invoer: number | null = null;
       let source: string | null = null;
 
+      // Priorité identique à l'export/la page : manuel > catalogue validé
+      // douane > Claude > estimation interne (jamais validée douane).
+      const catalogMatched = r.suggested_code && r.suggestion_source && r.suggestion_source !== "none";
       if (r.user_code) {
         code = r.user_code;
         invoer = r.suggested_invoer_pct ?? r.claude_invoer_pct ?? null;
         source = "manual";
-      } else if (r.suggested_code && r.suggestion_source && r.suggestion_source !== "none") {
+      } else if (catalogMatched && r.suggestion_validated === 1) {
         code = r.suggested_code;
         invoer = r.suggested_invoer_pct;
         // Catalog suggestions come from previous packing-list or customs estimates.
@@ -126,6 +130,11 @@ export function promoteUploadToImport(uploadId: number): PromotionResult {
         code = r.claude_code;
         invoer = r.claude_invoer_pct;
         source = "claude_vision";
+      } else if (catalogMatched) {
+        // Estimation interne seule : mieux que rien, mais reste 'packing_list'
+        code = r.suggested_code;
+        invoer = r.suggested_invoer_pct;
+        source = "packing_list";
       } else {
         rowsWithoutCode++;
       }

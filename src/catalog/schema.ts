@@ -199,6 +199,19 @@ export function initSchema(db: Database.Database): void {
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_upload_rows_claude_status ON upload_rows(claude_status)");
 
+  // Migration : distinguer les suggestions catalogue validées douane des
+  // estimations internes (jamais validées douane, donc pas fiables).
+  // Backfill des anciennes lignes via la note générée par lookup.ts : seules
+  // les estimations internes contiennent le mot « interne ».
+  if (!rowColNames.has("suggestion_validated")) {
+    db.exec("ALTER TABLE upload_rows ADD COLUMN suggestion_validated INTEGER");
+    db.exec(`
+      UPDATE upload_rows
+      SET suggestion_validated = CASE WHEN suggestion_note LIKE '%interne%' THEN 0 ELSE 1 END
+      WHERE suggested_code IS NOT NULL AND suggested_code != ''
+    `);
+  }
+
   // Normalisation : d'anciens runs ont stocké les taux Claude en pourcents (6.5)
   // au lieu de fractions (0.065). Un taux > 150% n'existe pas dans nos familles
   // de produits → toute valeur > 1.5 est un pourcent à convertir.

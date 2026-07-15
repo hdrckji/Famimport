@@ -65,38 +65,68 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
   for (const r of rows) {
     const target = sheet.getRow(r.row_index);
 
-    // Catalog suggestion wins. If absent and Claude has produced something, fall back to Claude.
-    let fromCatalog = r.user_code != null || (r.suggested_code != null && r.suggested_code !== "");
-    let finalCode =
-      r.user_code ??
-      r.suggested_code ??
-      (r.claude_status === "done" ? r.claude_code : null) ??
-      null;
-    let finalInvoer =
-      r.user_code != null
-        ? r.suggested_invoer_pct
-        : r.suggested_code != null
-          ? r.suggested_invoer_pct
-          : r.claude_status === "done"
-            ? r.claude_invoer_pct
-            : null;
-    let finalSource = r.user_code
-      ? "manual"
-      : r.suggested_code
-        ? r.suggestion_source ?? ""
-        : r.claude_status === "done"
-          ? "claude_vision"
-          : r.claude_status ?? "";
+    // Priorité du code final : manuel > catalogue validé douane > Claude >
+    // estimation interne. Un code d'historique jamais validé douane est faux
+    // trop souvent pour primer sur la vision Claude — il ne sert de repli que
+    // si Claude n'a rien produit. Même logique que effectiveCode() (views-upload.ts).
+    const hasSuggestion = r.suggested_code != null && r.suggested_code !== "";
+    const catalogValidated = hasSuggestion && r.suggestion_validated === 1;
+    const claudeDone = r.claude_status === "done" && !!r.claude_code;
+    const claudeOk = claudeDone && checkCode(getDb(), r.claude_code!).status !== "invalid";
+
+    let fromCatalog: boolean;
+    let finalCode: string | null;
+    let finalInvoer: number | null;
+    let finalSource: string;
+    if (r.user_code != null) {
+      fromCatalog = true;
+      finalCode = r.user_code;
+      finalInvoer = r.suggested_invoer_pct;
+      finalSource = "manual";
+    } else if (catalogValidated) {
+      fromCatalog = true;
+      finalCode = r.suggested_code;
+      finalInvoer = r.suggested_invoer_pct;
+      finalSource = r.suggestion_source ?? "";
+    } else if (claudeOk) {
+      fromCatalog = false;
+      finalCode = r.claude_code;
+      finalInvoer = r.claude_invoer_pct;
+      finalSource = "claude_vision";
+    } else if (hasSuggestion) {
+      fromCatalog = true;
+      finalCode = r.suggested_code;
+      finalInvoer = r.suggested_invoer_pct;
+      finalSource = r.suggestion_source ?? "";
+    } else if (claudeDone) {
+      // Code Claude invalide et aucun repli : il sera flaggé CODE INEXISTANT plus bas
+      fromCatalog = false;
+      finalCode = r.claude_code;
+      finalInvoer = r.claude_invoer_pct;
+      finalSource = "claude_vision";
+    } else {
+      fromCatalog = false;
+      finalCode = null;
+      finalInvoer = null;
+      finalSource = r.claude_status ?? "";
+    }
     let finalConfidence = fromCatalog
       ? r.suggestion_confidence ?? ""
-      : r.claude_status === "done"
+      : claudeDone
         ? r.claude_confidence ?? ""
         : "";
     let finalNote = fromCatalog
       ? r.suggestion_note ?? ""
-      : r.claude_status === "done"
+      : claudeDone
         ? r.claude_justification ?? ""
         : r.claude_error ?? r.suggestion_note ?? "";
+    if (!fromCatalog && claudeOk && hasSuggestion && r.user_code == null) {
+      const prefix =
+        r.claude_code === r.suggested_code
+          ? `Estimation interne ${r.suggested_code} confirmée par Claude. `
+          : `Estimation interne ${r.suggested_code} (jamais validée douane) remplacée par Claude. `;
+      finalNote = prefix + finalNote;
+    }
     let decision = r.user_decision ?? (finalCode ? (fromCatalog ? "auto-catalogue" : "auto-claude") : "à compléter");
 
     // Garde-fou final : un code absent de la nomenclature officielle TARBEL
