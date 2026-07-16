@@ -1,9 +1,13 @@
 import ExcelJS from "exceljs";
 import path from "node:path";
-import { getUpload, getUploadRows } from "./upload.js";
-import { pickDataSheet } from "../catalog/reader.js";
+import { getUpload, getUploadRows, type UploadRow } from "./upload.js";
+import { pickDataSheet, cellToText } from "../catalog/reader.js";
 import { getDb } from "./db.js";
 import { checkCode } from "../tarabel/validate.js";
+import { ensureDescriptions } from "./describe.js";
+
+// Code fournisseur Famiflora fixe pour les imports Chine (feuille bewerkt)
+const LEVERANCIER_CODE = 245;
 
 const FILL_HIGH: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD5E8D4" } };
 const FILL_MEDIUM: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
@@ -33,6 +37,18 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
   const hsCol = findCol(/^hs\s*code$/, /^goederen.*code/) ?? 8;
   const intrastatCol = findCol(/^intrastat.?code$/, /^intrastat$/) ?? hsCol;
   const invoerCol = findCol(/^invoer\s*%$/, /^%\s*invoer$/, /^invoer$/);
+  // Colonnes source pour la feuille bewerkt : ITEM NO (packing list chinois)
+  // ou bestelnummer (format historique) ; PACK = pièces par carton
+  const itemNoCol = findCol(/^item\s*no\.?$/, /^bestel.?nummer$/);
+  const packCol = findCol(/^bestelhoeveelheid$/, /^pack$/);
+
+  const sheet2Data: Array<{
+    row: UploadRow;
+    code: string | null;
+    invoer: number | null;
+    itemNo: string;
+    pack: string;
+  }> = [];
 
   // Si le fichier est lui-même un export vérifié (re-contrôle), on réécrit le
   // bloc d'audit existant au lieu d'en ajouter un deuxième à côté.
@@ -213,12 +229,96 @@ export async function buildExportWorkbook(uploadId: number): Promise<{ buffer: B
     } else if (r.claude_material_confirmed === 1) {
       target.getCell(auditCols.materialOk).fill = FILL_HIGH;
     }
+
+    sheet2Data.push({
+      row: r,
+      code: finalCode && !codeInvalid ? finalCode : null,
+      invoer: finalCode && !codeInvalid ? finalInvoer : null,
+      itemNo: itemNoCol != null ? cellToText(target.getCell(itemNoCol).value) : "",
+      pack: packCol != null ? cellToText(target.getCell(packCol).value) : "",
+    });
     target.commit();
   }
+
+  await addBewerktSheet(sourceWb, sheet.id, sheet2Data);
 
   const arrayBuffer = await sourceWb.xlsx.writeBuffer();
   const buffer = Buffer.from(arrayBuffer as ArrayBuffer);
   const base = path.basename(upload.original_name, path.extname(upload.original_name));
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   return { buffer, filename: `${base}.verified-${ts}.xlsx` };
+}
+
+/**
+ * Feuille 2 "BEWERKT" : le format interne Famiflora prêt à l'emploi.
+ * A leverancier | B omschrijving | C meertalige omschrijving nl |
+ * D meertalige omschrijving fr | E intrastat | F %invoer | G eanbarcode |
+ * H bestelnummer | I bestelhoeveelheid | J aantal
+ */
+async function addBewerktSheet(
+  wb: ExcelJS.Workbook,
+  dataSheetId: number,
+  items: Array<{ row: UploadRow; code: string | null; invoer: number | null; itemNo: string; pack: string }>,
+): Promise<void> {
+  const descs = await ensureDescriptions(items.map((i) => i.row));
+
+  // Un ré-export d'un fichier déjà vérifié contient déjà la feuille : on la
+  // régénère. Si l'onglet de données s'appelle lui-même BEWERKT (anciens
+  // formats), on prend un autre nom au lieu de détruire les données.
+  let sheetName = "BEWERKT";
+  const clash = wb.getWorksheet(sheetName);
+  if (clash && clash.id === dataSheetId) sheetName = "BEWERKT famimport";
+  const existing = wb.getWorksheet(sheetName);
+  if (existing && existing.id !== dataSheetId) wb.removeWorksheet(existing.id);
+
+  const ws = wb.addWorksheet(sheetName);
+  const headers = [
+    "leverancier",
+    "omschrijving",
+    "meertalige omschrijving nl",
+    "meertalige omschrijving fr",
+    "intrastat",
+    "%invoer",
+    "eanbarcode",
+    "bestelnummer",
+    "bestelhoeveelheid",
+    "aantal",
+  ];
+  const widths = [11, 42, 42, 42, 13, 9, 15, 13, 16, 8];
+  const headerRow = ws.getRow(1);
+  headers.forEach((h, i) => {
+    const cell = headerRow.getCell(i + 1);
+    cell.value = h;
+    cell.font = { bold: true };
+    ws.getColumn(i + 1).width = widths[i];
+  });
+  headerRow.commit();
+
+  let out = 2;
+  for (const item of items) {
+    const d = descs.get(item.row.id);
+    const row = ws.getRow(out++);
+    row.getCell(1).value = LEVERANCIER_CODE;
+    row.getCell(2).value = d?.omschrijving ?? "";
+    row.getCell(3).value = d?.nl ?? "";
+    row.getCell(4).value = d?.fr ?? "";
+    // Garde-fou : un code invalide/absent n'est jamais écrit — cellule vide
+    // marquée en rouge, le détail est dans le bloc d'audit de la feuille 1
+    if (item.code) {
+      row.getCell(5).value = item.code;
+    } else {
+      row.getCell(5).fill = FILL_LOW;
+    }
+    if (item.invoer != null) {
+      row.getCell(6).value = item.invoer;
+      row.getCell(6).numFmt = "0.00%";
+    }
+    // EAN et bestelnummer en texte : préserve les zéros de tête (ex. "00037")
+    row.getCell(7).value = item.row.ean ?? "";
+    row.getCell(8).value = item.itemNo;
+    const packNum = Number(item.pack);
+    row.getCell(9).value = item.pack !== "" && Number.isFinite(packNum) ? packNum : item.pack;
+    if (item.row.quantity != null) row.getCell(10).value = item.row.quantity;
+    row.commit();
+  }
 }

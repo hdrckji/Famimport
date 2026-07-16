@@ -29,7 +29,7 @@ export interface ReadResult {
   rows: CatalogRow[];
 }
 
-function cellToText(v: ExcelJS.CellValue): string {
+export function cellToText(v: ExcelJS.CellValue): string {
   if (v == null) return "";
   if (typeof v === "string") return v.trim();
   if (typeof v === "number" || typeof v === "boolean") return String(v);

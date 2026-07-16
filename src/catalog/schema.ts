@@ -193,6 +193,11 @@ export function initSchema(db: Database.Database): void {
     ["claude_needs_manual_review", "INTEGER"],
     ["claude_error", "TEXT"],
     ["claude_completed_at", "TEXT"],
+    // Descriptions générées pour la feuille "bewerkt" de l'export (cache :
+    // remplies au premier export, réutilisées ensuite sans rappeler Claude)
+    ["desc_omschrijving", "TEXT"],
+    ["desc_nl", "TEXT"],
+    ["desc_fr", "TEXT"],
   ];
   for (const [name, type] of rowAlters) {
     if (!rowColNames.has(name)) db.exec(`ALTER TABLE upload_rows ADD COLUMN ${name} ${type}`);

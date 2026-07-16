@@ -62,6 +62,9 @@ export interface UploadRow {
   claude_needs_manual_review: number | null;
   claude_error: string | null;
   claude_completed_at: string | null;
+  desc_omschrijving: string | null;
+  desc_nl: string | null;
+  desc_fr: string | null;
 }
 
 export async function processUpload(storedPath: string, originalName: string): Promise<number> {
